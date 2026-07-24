@@ -1,0 +1,33 @@
+# Datos (12 GB, no van al repo)
+res/
+*.npy
+*.dcm
+*.Dcm
+
+# Entorno virtual
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Modelos entrenados (pesan mucho)
+*.pt
+*.pth
+*.ckpt
+outputs/
+checkpoints/
+
+# Figuras generadas
+*.png
+*.jpg
+*.pdf
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
