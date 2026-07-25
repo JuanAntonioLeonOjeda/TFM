@@ -19,14 +19,12 @@ CLINICAL_COLUMNS = [
 
 
 def load_clinical(path: Path = EXCEL_PATH) -> pd.DataFrame:
-    """Reads the clinical Excel file."""
     df = pd.read_excel(path)
-    df["patient_id"] = df["patient_id"].astype(str).str.extract(r"(\d+)")[0].astype(int)
+    df["patient_id"] = df["patient_id"].astype(int)
     return df
 
 
 def load_image_index(base: Path = DATA_DIR) -> pd.DataFrame:
-    """Builds a DataFrame with patient_id and the path of every DICOM file."""
     rows = [
         {"patient_id": int(_PATTERN.match(folder.name).group(1)), "image_path": str(f)}
         for folder in Path(base).rglob("*")

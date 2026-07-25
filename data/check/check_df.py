@@ -3,7 +3,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from db_data import load_lumos, read_image
+from df_import import load_lumos, read_image
 
 
 def check_environment():

@@ -7,7 +7,7 @@ import cv2
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
-from db_data import load_lumos, read_image   # <-- adjust if your module has another name
+from df_import import load_lumos, read_image
 
 # =====================================================================
 # CONFIG
@@ -23,10 +23,6 @@ SEED = 42
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "res" / "processed"
 
-
-# =====================================================================
-# SPLIT BY PATIENT
-# =====================================================================
 def split_by_patient(df: pd.DataFrame) -> pd.DataFrame:
     """Assigns each row a split ('train'/'val'/'test'), splitting by patient."""
     # one label per patient (all its images share the same label)
@@ -57,10 +53,6 @@ def split_by_patient(df: pd.DataFrame) -> pd.DataFrame:
     df["split"] = split.values
     return df
 
-
-# =====================================================================
-# IMAGE PROCESSING
-# =====================================================================
 def process_image(path: str) -> np.ndarray:
     """DICOM -> uint8 grayscale, CLAHE, resized to IMG_SIZE x IMG_SIZE."""
     img = read_image(path)                       # float32 in [0, 1], MONOCHROME1 fixed
@@ -74,10 +66,6 @@ def process_image(path: str) -> np.ndarray:
 
     return img
 
-
-# =====================================================================
-# MAIN
-# =====================================================================
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
