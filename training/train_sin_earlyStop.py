@@ -1,20 +1,3 @@
-"""
-train.py
-========
-Generic training loop for the multitask LumosNet (classification + BMD regression),
-now with EARLY STOPPING to fight overfitting.
-
-The transfer-learning strategy is pluggable (see training/strategies/).
-
-Run:
-    python -m training.train --strategy differential
-    python -m training.train --strategy phased
-
-Outputs (in outputs/):
-    best_<strategy>.pt      best model weights (lowest val loss)
-    history_<strategy>.png  loss / accuracy / rmse curves
-"""
-
 import argparse
 from pathlib import Path
 
@@ -34,11 +17,11 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "outputs"
 
 # ---- hyperparameters ----
-EPOCHS = 50
+EPOCHS = 30
 BATCH_SIZE = 32
 BMD_WEIGHT = 10.0          # weight of the regression loss vs classification loss
-PATIENCE = 7               # early stopping: stop after N epochs without val improvement
 
+# registry: name -> strategy class
 STRATEGIES = {
     "differential": DifferentialStrategy,
     "phased": PhasedStrategy,
@@ -49,6 +32,7 @@ STRATEGIES = {
 # LOSS
 # =====================================================================
 def compute_loss(logits, bmd_pred, labels, bmd_true, ce, mse):
+    """Combined multitask loss: classification + weighted regression."""
     loss_cls = ce(logits, labels)
     loss_reg = mse(bmd_pred, bmd_true)
     return loss_cls + BMD_WEIGHT * loss_reg
@@ -88,7 +72,7 @@ def evaluate(model, loader, ce, mse, device):
         sq_err += ((bmd_pred - bmd) ** 2).sum().item()
         n += images.size(0)
 
-    return running / n, correct / n, (sq_err / n) ** 0.5
+    return running / n, correct / n, (sq_err / n) ** 0.5   # loss, accuracy, rmse
 
 
 # =====================================================================
@@ -99,7 +83,7 @@ def train(strategy_name: str):
     device = get_device()
 
     strategy = STRATEGIES[strategy_name]()
-    print(f"Strategy: {strategy_name} | Device: {device} | Early stopping patience: {PATIENCE}\n")
+    print(f"Strategy: {strategy_name} | Device: {device}\n")
 
     loaders = make_dataloaders(batch_size=BATCH_SIZE)
     model = LumosNet(pretrained=True).to(device)
@@ -111,10 +95,10 @@ def train(strategy_name: str):
 
     history = {"train_loss": [], "val_loss": [], "val_acc": [], "val_rmse": []}
     best_val = float("inf")
-    best_epoch = 0
-    epochs_no_improve = 0        # <-- early stopping counter
 
     for epoch in range(1, EPOCHS + 1):
+        # let the strategy change things at the start of the epoch (e.g. unfreeze).
+        # if it returns a new optimizer, we switch to it.
         new_opt = strategy.on_epoch_start(model, epoch)
         if new_opt is not None:
             optimizer = new_opt
@@ -128,50 +112,35 @@ def train(strategy_name: str):
         history["val_acc"].append(val_acc)
         history["val_rmse"].append(val_rmse)
 
-        # --- early stopping logic ---
+        print(f"Epoch {epoch:2d}/{EPOCHS} | train {train_loss:.4f} | "
+              f"val {val_loss:.4f} | acc {val_acc:.3f} | rmse {val_rmse:.4f}")
+
         if val_loss < best_val:
             best_val = val_loss
-            best_epoch = epoch
-            epochs_no_improve = 0
             torch.save(model.state_dict(), OUT_DIR / f"best_{strategy_name}.pt")
-            flag = "  <- best"
-        else:
-            epochs_no_improve += 1
-            flag = f"  (no improve {epochs_no_improve}/{PATIENCE})"
 
-        print(f"Epoch {epoch:2d}/{EPOCHS} | train {train_loss:.4f} | "
-              f"val {val_loss:.4f} | acc {val_acc:.3f} | rmse {val_rmse:.4f}{flag}")
-
-        if epochs_no_improve >= PATIENCE:
-            print(f"\nEarly stopping at epoch {epoch}: "
-                  f"no improvement in {PATIENCE} epochs.")
-            break
-
-    print(f"\nBest val loss: {best_val:.4f} (epoch {best_epoch})")
+    print(f"\nBest val loss: {best_val:.4f}")
     print(f"Saved: {OUT_DIR / f'best_{strategy_name}.pt'}")
 
-    plot_history(history, strategy_name, best_epoch)
+    plot_history(history, strategy_name)
     return history
 
 
-def plot_history(history, strategy_name, best_epoch):
+def plot_history(history, strategy_name):
     epochs = range(1, len(history["train_loss"]) + 1)
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
 
     axes[0].plot(epochs, history["train_loss"], label="train")
     axes[0].plot(epochs, history["val_loss"], label="val")
-    axes[0].axvline(best_epoch, color="gray", linestyle="--", linewidth=1, label="best")
     axes[0].set_title("Loss"); axes[0].set_xlabel("epoch"); axes[0].legend()
 
     axes[1].plot(epochs, history["val_acc"], color="green")
-    axes[1].axvline(best_epoch, color="gray", linestyle="--", linewidth=1)
     axes[1].set_title("Val accuracy (classification)"); axes[1].set_xlabel("epoch")
 
     axes[2].plot(epochs, history["val_rmse"], color="red")
-    axes[2].axvline(best_epoch, color="gray", linestyle="--", linewidth=1)
     axes[2].set_title("Val RMSE (BMD regression)"); axes[2].set_xlabel("epoch")
 
-    plt.suptitle(f"Strategy: {strategy_name}  (best epoch: {best_epoch})")
+    plt.suptitle(f"Strategy: {strategy_name}")
     plt.tight_layout()
     path = OUT_DIR / f"history_{strategy_name}.png"
     plt.savefig(path, dpi=120, bbox_inches="tight")

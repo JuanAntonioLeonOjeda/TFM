@@ -13,7 +13,7 @@ def get_device():
 
 
 class LumosNet(nn.Module):
-    def __init__(self, num_classes: int = 3, pretrained: bool = True, dropout: float = 0.3):
+    def __init__(self, num_classes: int = 3, pretrained: bool = True, dropout: float = 0.5):
         super().__init__()
 
         # ---- shared backbone ----

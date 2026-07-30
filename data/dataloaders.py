@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from torch.utils.data import DataLoader
-from lumos_dataset import LumosDataset
+from data.lumos_dataset import LumosDataset
 
 ROOT = Path(__file__).resolve().parent.parent
 PROC_DIR = ROOT / "res" / "processed"

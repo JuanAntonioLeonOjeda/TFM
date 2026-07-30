@@ -14,12 +14,12 @@ def build_transforms(train: bool):
     steps = [T.ToPILImage()]
 
     if train:
-        # Data Augmentation
         steps += [
-            T.RandomRotation(degrees=10),
-            T.RandomResizedCrop(224, scale=(0.85, 1.0)),
+            T.RandomRotation(degrees=15),                      # 10 -> 15
+            T.RandomResizedCrop(224, scale=(0.75, 1.0)),       # recorte más amplio
             T.RandomHorizontalFlip(p=0.5),
-            T.ColorJitter(brightness=0.15, contrast=0.15),
+            T.ColorJitter(brightness=0.2, contrast=0.2),       # 0.15 -> 0.2
+            T.RandomAffine(degrees=0, translate=(0.05, 0.05)), # pequeños desplazamientos
         ]
 
     steps += [
