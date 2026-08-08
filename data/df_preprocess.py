@@ -12,7 +12,7 @@ from df_import import load_lumos, read_image
 # =====================================================================
 # CONFIG
 # =====================================================================
-IMG_SIZE = 224                 # ResNet50 input size
+IMG_SIZE = 320                 # antes 224 (ResNet50 Input Size)
 USE_CLAHE = True               # local contrast enhancement
 CLAHE_CLIP = 2.0
 CLAHE_GRID = (8, 8)

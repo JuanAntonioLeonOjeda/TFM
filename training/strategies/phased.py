@@ -2,7 +2,7 @@ import torch
 from .base import Strategy
 
 class PhasedStrategy(Strategy):
-    def __init__(self, freeze_epochs=8, lr_frozen=1e-3, lr_finetune=1e-4, weight_decay=1e-4):
+    def __init__(self, freeze_epochs=8, lr_frozen=1e-3, lr_finetune=1e-4, weight_decay=0):
         self.freeze_epochs = freeze_epochs
         self.lr_frozen = lr_frozen
         self.lr_finetune = lr_finetune
