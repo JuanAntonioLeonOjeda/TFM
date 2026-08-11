@@ -38,6 +38,7 @@ DATASETS = {
     "full": {"img_file": "images.npy", "meta_file": "metadata.csv"},
     "roi":  {"img_file": "images_roi.npy", "meta_file": "metadata_roi.csv"},
     "roi_hybrid": {"img_file": "images_roi_hybrid.npy", "meta_file": "metadata_roi_hybrid.csv"},
+    "hires": {"img_file": "images_320.npy", "meta_file": "metadata_320.csv"},
 }
 
 
