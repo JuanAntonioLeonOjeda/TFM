@@ -28,7 +28,7 @@ import torch
 import torchvision.transforms as T
 
 from data.loader import read_image          # AJUSTA al nombre real de tu módulo
-from models.resnet import LumosNet, get_device
+from models.lumosnet import LumosNet, get_device
 
 ROOT = Path(__file__).resolve().parent
 MODEL_PATH = ROOT / "outputs" / "best_phased_full.pt"

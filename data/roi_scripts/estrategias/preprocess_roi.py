@@ -29,7 +29,7 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
 from data.df_import import load_lumos, read_image   # AJUSTA al nombre real de tu módulo
-from roi_crop import crop_roi
+from data.roi_scripts.roi_crop import crop_roi
 
 # =====================================================================
 # CONFIG

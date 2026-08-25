@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report, roc_auc_score
 
 from data.dataloaders import make_dataloaders, PROC_DIR
-from models.resnet import LumosNet, get_device
+from models.lumosnet import LumosNet, get_device
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "outputs"
