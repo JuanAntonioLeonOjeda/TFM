@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from data.dataloaders import make_dataloaders
-from models.resnet import LumosNet, get_device
+from models.lumosnet import LumosNet, get_device
 from training.strategies.differential import DifferentialStrategy
 from training.strategies.phased import PhasedStrategy
 
