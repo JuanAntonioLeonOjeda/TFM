@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-09-16T19:44:41",
+  "dicom_path": "/Users/Usuario/Code/master/tfm/res/dataset/lumos_x_001_280_dcm/lumos_x_009/lumos_x_009_1.Dcm",
+  "patient": "lumos_x_009",
+  "view": 1,
+  "prob_sano": 0.9792,
+  "prob_osteopenia": 0.0207,
+  "prob_osteoporosis": 0.0001,
+  "predicted_class": "Sano",
+  "bmd_estimated": 1.4333,
+  "heatmap_generated": true,
+  "heatmap_target": "classification",
+  "heatmap_explained_class": "Sano",
+  "heatmap_out": "/Users/Usuario/Code/master/tfm/heatmaps/heatmap_lumos_x_009_imagen1.png"
+}
