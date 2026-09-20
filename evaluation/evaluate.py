@@ -5,15 +5,18 @@ Evaluates a trained LumosNet on the TEST set, aggregating predictions
 PER PATIENT (images of each patient combined by averaging softmax
 probabilities; BMD is the average of their predicted values).
 
-Supports both the full dataset and the AP+ROI dataset via --data.
+Supports both the full dataset and the AP+ROI dataset via --data, and the
+class-weighting scheme used at training time via --class-weighting (must
+match what you passed to train.py, so the checkpoint filename resolves).
 
 Run:
     python -m evaluation.evaluate --strategy differential --data full
     python -m evaluation.evaluate --strategy phased        --data roi
+    python -m evaluation.evaluate --strategy phased        --data full --class-weighting inverse
 
 Outputs (in outputs/):
-    confusion_<strategy>_<data>.png
-    bmd_scatter_<strategy>_<data>.png
+    confusion_<strategy>_<data>[_cw<scheme>].png
+    bmd_scatter_<strategy>_<data>[_cw<scheme>].png
 """
 
 import argparse
@@ -169,16 +172,22 @@ def plot_bmd_scatter(agg, tag):
 # =====================================================================
 # MAIN
 # =====================================================================
-def evaluate(strategy: str, data_name: str):
+def evaluate(strategy: str, data_name: str, class_weighting: str = "none"):
     OUT_DIR.mkdir(exist_ok=True)
     device = get_device()
 
     files = DATASETS[data_name]
     tag = f"{strategy}_{data_name}"
+    if class_weighting != "none":  # <-- NUEVO: debe coincidir con el tag usado en train.py
+        tag += f"_cw{class_weighting}"
 
     ckpt = OUT_DIR / f"best_{tag}.pt"
     if not ckpt.exists():
-        raise FileNotFoundError(f"No trained model found: {ckpt}. Train first.")
+        raise FileNotFoundError(
+            f"No trained model found: {ckpt}. "
+            f"Entrena primero con: python -m training.train --strategy {strategy} "
+            f"--data {data_name}" + (f" --class-weighting {class_weighting}" if class_weighting != "none" else "")
+        )
 
     loaders = make_dataloaders(batch_size=32, **files)
     model = LumosNet(pretrained=False).to(device)
@@ -200,5 +209,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--strategy", choices=["differential", "phased"], default="phased")
     parser.add_argument("--data", choices=list(DATASETS.keys()), default="full")
+    parser.add_argument("--class-weighting", choices=["none", "inverse", "effective"],  # <-- NUEVO
+                         default="none",
+                         help="Debe coincidir con el usado al entrenar, para que el nombre "
+                              "del checkpoint coincida (best_<strategy>_<data>_cw<scheme>.pt)")
     args = parser.parse_args()
-    evaluate(args.strategy, args.data)
+    evaluate(args.strategy, args.data, args.class_weighting)

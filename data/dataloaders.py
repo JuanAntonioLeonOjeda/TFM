@@ -41,6 +41,8 @@ def make_dataloaders(batch_size: int = 32, num_workers: int = 0, bmd_col: str = 
             train=(split == "train"),
             bmd_col=bmd_col,
         )
+        ds.meta_subset = subset_meta.reset_index(drop=True)  # <-- NUEVO: expuesto para cálculo de pesos de clase, etc.
+
         loaders[split] = DataLoader(
             ds,
             batch_size=batch_size,

@@ -8,10 +8,11 @@ The transfer-learning strategy is pluggable (see training/strategies/).
 Run:
     python -m training.train --strategy differential --data full
     python -m training.train --strategy phased        --data roi
+    python -m training.train --strategy phased        --data full --class-weighting inverse
 
 Outputs (in outputs/):
-    best_<strategy>_<data>.pt      best model weights
-    history_<strategy>_<data>.png  loss / accuracy / rmse curves
+    best_<strategy>_<data>[_cw<scheme>].pt      best model weights
+    history_<strategy>_<data>[_cw<scheme>].png  loss / accuracy / rmse curves
 """
 
 import argparse
@@ -39,6 +40,7 @@ BATCH_SIZE = 32
 BMD_WEIGHT = 10.0
 PATIENCE = 7
 SEED = 42
+NUM_CLASSES = 3  # <-- NUEVO: Sano / Osteopenia / Osteoporosis
 
 STRATEGIES = {
     "differential": DifferentialStrategy,
@@ -58,6 +60,65 @@ def set_seed(seed: int):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+
+# =====================================================================
+# CLASS WEIGHTING  # <-- NUEVO: bloque completo
+# =====================================================================
+def get_train_labels(loader) -> torch.Tensor:
+    """
+    Obtiene las etiquetas del split de entrenamiento a partir del DataFrame
+    de metadatos que dataloaders.py expone en ds.meta_subset (columna
+    "label"), sin depender de cómo esté implementado LumosDataset por dentro.
+
+    Si por lo que sea ese atributo no existe (p.ej. usas una versión antigua
+    de dataloaders.py sin la línea añadida), cae en iterar el DataLoader
+    completo -- funciona igual, solo que tarda algo más en arrancar porque
+    sí decodifica las imágenes.
+    """
+    ds = loader.dataset
+
+    if hasattr(ds, "meta_subset") and "label" in ds.meta_subset.columns:
+        return torch.as_tensor(ds.meta_subset["label"].values, dtype=torch.long)
+
+    print("[aviso] ds.meta_subset no disponible: calculando etiquetas iterando "
+          "el DataLoader completo (más lento, pero funciona igual).")
+    all_labels = []
+    for _, labels, _ in loader:
+        all_labels.append(labels)
+    return torch.cat(all_labels)
+
+
+def compute_class_weights(loader, num_classes: int = NUM_CLASSES,
+                           scheme: str = "none", beta: float = 0.999):
+    """
+    Calcula los pesos por clase para CrossEntropyLoss, a partir de la
+    distribución REAL del split de entrenamiento (loader["train"]).
+
+    scheme:
+        "none"      -> sin ponderar (comportamiento actual, por defecto)
+        "inverse"   -> inversa de frecuencia normalizada (media de pesos ~1)
+        "effective" -> "effective number of samples" (Cui et al., 2019),
+                       suaviza más el efecto de clases muy desbalanceadas
+                       que la inversa de frecuencia pura
+    """
+    if scheme == "none":
+        return None
+
+    labels = get_train_labels(loader)
+    counts = torch.bincount(labels, minlength=num_classes).float()
+
+    if scheme == "inverse":
+        weights = counts.sum() / (num_classes * counts)
+    elif scheme == "effective":
+        effective_num = 1.0 - torch.pow(torch.tensor(beta), counts)
+        weights = (1.0 - beta) / effective_num
+        weights = weights / weights.sum() * num_classes  # normaliza a media 1
+    else:
+        raise ValueError(f"Esquema de balanceo desconocido: {scheme}")
+
+    return weights
+
 
 # =====================================================================
 # LOSS
@@ -108,7 +169,7 @@ def evaluate(model, loader, ce, mse, device):
 # =====================================================================
 # MAIN TRAINING LOOP
 # =====================================================================
-def train(strategy_name: str, data_name: str):
+def train(strategy_name: str, data_name: str, class_weighting: str = "none"):  # <-- NUEVO parámetro
     set_seed(SEED)
     OUT_DIR.mkdir(exist_ok=True)
     device = get_device()
@@ -116,12 +177,23 @@ def train(strategy_name: str, data_name: str):
     strategy = STRATEGIES[strategy_name]()
     files = DATASETS[data_name]
     tag = f"{strategy_name}_{data_name}"
-    print(f"Strategy: {strategy_name} | Data: {data_name} | Device: {device} | Patience: {PATIENCE}\n")
+    if class_weighting != "none":            # <-- NUEVO: no rompe nombres de archivo existentes
+        tag += f"_cw{class_weighting}"
+
+    print(f"Strategy: {strategy_name} | Data: {data_name} | Device: {device} | "
+          f"Patience: {PATIENCE} | Class weighting: {class_weighting}\n")
 
     loaders = make_dataloaders(batch_size=BATCH_SIZE, **files)
     model = LumosNet(pretrained=True).to(device)
 
-    ce = nn.CrossEntropyLoss()
+    class_weights = compute_class_weights(loaders["train"], scheme=class_weighting)  # <-- NUEVO
+    if class_weights is not None:
+        print(f"Pesos de clase ({class_weighting}): "
+              f"{[round(w, 3) for w in class_weights.tolist()]}\n")
+        ce = nn.CrossEntropyLoss(weight=class_weights.to(device))
+    else:
+        ce = nn.CrossEntropyLoss()
+
     mse = nn.MSELoss()
 
     optimizer = strategy.build_optimizer(model)
@@ -198,6 +270,10 @@ if __name__ == "__main__":
     parser.add_argument("--strategy", choices=list(STRATEGIES.keys()), default="phased")
     parser.add_argument("--data", choices=list(DATASETS.keys()), default="full",
                         help="'full' = both views, 'roi' = AP-only cropped")
+    parser.add_argument("--class-weighting", choices=["none", "inverse", "effective"],  # <-- NUEVO
+                        default="none",
+                        help="Esquema de ponderación de clases en la pérdida de "
+                             "clasificación (default: none, sin ponderar)")
     args = parser.parse_args()
 
-    train(args.strategy, args.data)
+    train(args.strategy, args.data, args.class_weighting)  # <-- NUEVO argumento
