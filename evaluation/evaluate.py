@@ -5,18 +5,21 @@ Evaluates a trained LumosNet on the TEST set, aggregating predictions
 PER PATIENT (images of each patient combined by averaging softmax
 probabilities; BMD is the average of their predicted values).
 
-Supports both the full dataset and the AP+ROI dataset via --data, and the
-class-weighting scheme used at training time via --class-weighting (must
-match what you passed to train.py, so the checkpoint filename resolves).
+Supports both the full dataset and the AP+ROI dataset via --data, the
+class-weighting scheme used at training time via --class-weighting, and
+the medical covariates via --covariates. Both flags must match what you
+passed to train.py, so the checkpoint filename and model architecture
+resolve correctly.
 
 Run:
     python -m evaluation.evaluate --strategy differential --data full
     python -m evaluation.evaluate --strategy phased        --data roi
     python -m evaluation.evaluate --strategy phased        --data full --class-weighting inverse
+    python -m evaluation.evaluate --strategy phased        --data full --covariates
 
 Outputs (in outputs/):
-    confusion_<strategy>_<data>[_cw<scheme>].png
-    bmd_scatter_<strategy>_<data>[_cw<scheme>].png
+    confusion_<strategy>_<data>[_cw<scheme>][_covars].png
+    bmd_scatter_<strategy>_<data>[_cw<scheme>][_covars].png
 """
 
 import argparse
@@ -30,7 +33,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report, roc_auc_score
 
-from data.dataloaders import make_dataloaders, PROC_DIR
+from data.dataloaders import make_dataloaders, PROC_DIR, MEDICAL_COVARIATES
 from models.lumosnet import LumosNet, get_device
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -49,12 +52,19 @@ DATASETS = {
 # INFERENCE ON TEST (per image)
 # =====================================================================
 @torch.no_grad()
-def predict_test(model, loader, device):
+def predict_test(model, loader, device, use_covariates: bool):
     model.eval()
     all_probs, all_bmd = [], []
-    for images, _, _ in loader:
+    for batch in loader:
+        if use_covariates:
+            images, _, _, covariates = batch
+            covariates = covariates.to(device)
+        else:
+            images = batch[0]
+            covariates = None
+
         images = images.to(device)
-        logits, bmd_pred = model(images)
+        logits, bmd_pred = model(images, covariates)
         probs = torch.softmax(logits, dim=1)
         all_probs.append(probs.cpu().numpy())
         all_bmd.append(bmd_pred.cpu().numpy())
@@ -172,29 +182,36 @@ def plot_bmd_scatter(agg, tag):
 # =====================================================================
 # MAIN
 # =====================================================================
-def evaluate(strategy: str, data_name: str, class_weighting: str = "none"):
+def evaluate(strategy: str, data_name: str, class_weighting: str = "none",
+             use_covariates: bool = False):
     OUT_DIR.mkdir(exist_ok=True)
     device = get_device()
 
     files = DATASETS[data_name]
     tag = f"{strategy}_{data_name}"
-    if class_weighting != "none":  # <-- NUEVO: debe coincidir con el tag usado en train.py
+    if class_weighting != "none":
         tag += f"_cw{class_weighting}"
+    if use_covariates:
+        tag += "_covars"
 
     ckpt = OUT_DIR / f"best_{tag}.pt"
     if not ckpt.exists():
-        raise FileNotFoundError(
-            f"No trained model found: {ckpt}. "
-            f"Entrena primero con: python -m training.train --strategy {strategy} "
-            f"--data {data_name}" + (f" --class-weighting {class_weighting}" if class_weighting != "none" else "")
-        )
+        train_cmd = f"python -m training.train --strategy {strategy} --data {data_name}"
+        if class_weighting != "none":
+            train_cmd += f" --class-weighting {class_weighting}"
+        if use_covariates:
+            train_cmd += " --covariates"
+        raise FileNotFoundError(f"No trained model found: {ckpt}. Entrena primero con: {train_cmd}")
 
-    loaders = make_dataloaders(batch_size=32, **files)
-    model = LumosNet(pretrained=False).to(device)
+    covariate_cols = MEDICAL_COVARIATES if use_covariates else None
+    loaders = make_dataloaders(batch_size=32, covariate_cols=covariate_cols, **files)
+
+    num_covariates = len(MEDICAL_COVARIATES) if use_covariates else 0
+    model = LumosNet(pretrained=False, num_covariates=num_covariates).to(device)
     model.load_state_dict(torch.load(ckpt, map_location=device))
     print(f"Loaded {ckpt} | Device: {device}")
 
-    probs, bmd_pred = predict_test(model, loaders["test"], device)
+    probs, bmd_pred = predict_test(model, loaders["test"], device, use_covariates)
     agg = aggregate_by_patient(probs, bmd_pred, files["meta_file"])
     print(f"\nTest patients: {len(agg)}  (aggregated from {len(probs)} images)")
 
@@ -209,9 +226,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--strategy", choices=["differential", "phased"], default="phased")
     parser.add_argument("--data", choices=list(DATASETS.keys()), default="full")
-    parser.add_argument("--class-weighting", choices=["none", "inverse", "effective"],  # <-- NUEVO
+    parser.add_argument("--class-weighting", choices=["none", "inverse", "effective"],
                          default="none",
-                         help="Debe coincidir con el usado al entrenar, para que el nombre "
-                              "del checkpoint coincida (best_<strategy>_<data>_cw<scheme>.pt)")
+                         help="Debe coincidir con el usado al entrenar")
+    parser.add_argument("--covariates", action="store_true",
+                         help="Debe coincidir con el usado al entrenar")
     args = parser.parse_args()
-    evaluate(args.strategy, args.data, args.class_weighting)
+    evaluate(args.strategy, args.data, args.class_weighting, args.covariates)
