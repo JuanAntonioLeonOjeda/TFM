@@ -31,7 +31,7 @@ LABEL_HEIGHT = 60         # alto del área de texto bajo cada imagen
 HEADER_HEIGHT = 40        # alto de la fila de cabeceras (Vista 1, Vista 2...)
 ROW_LABEL_WIDTH = 0       # sin columna de ID de paciente
 PADDING = 8
-FILENAME_RE = re.compile(r"heatmap_(?P<patient>.+)_imagen(?P<view>\d+)\.png$")
+FILENAME_RE = re.compile(r"heatmap_(?P<patient>.+)_imagen(?P<view>\d+)(?P<variant>_covars)?\.png$")
 
 
 def natural_key(patient_id: str):
@@ -40,16 +40,25 @@ def natural_key(patient_id: str):
     return int(m.group(1)) if m else patient_id
 
 
-def load_entries(heatmaps_dir: Path):
+def load_entries(heatmaps_dir: Path, variant: str = "reference"):
     """
     Escanea heatmaps_dir y devuelve un dict {patient_id: {view: (png_path, meta_dict)}}
     meta_dict viene del .json correspondiente si existe (predicted_class, probs...).
+
+    variant: "reference" (heatmap_..._imagenN.png, sin sufijo) o "covars"
+        (heatmap_..._imagenN_covars.png). Nunca se mezclan en la misma
+        cuadrícula, porque una celda no puede mostrar dos heatmaps a la vez.
     """
     entries = {}
     for png_path in heatmaps_dir.glob("heatmap_*_imagen*.png"):
         m = FILENAME_RE.match(png_path.name)
         if not m:
             continue
+
+        file_variant = "covars" if m.group("variant") else "reference"
+        if file_variant != variant:
+            continue
+
         patient_id = m.group("patient")
         view = int(m.group("view"))
 
@@ -148,20 +157,23 @@ def main():
     parser.add_argument("--patients", type=str, default=None,
                          help="Filtra solo estos pacientes, p.ej. '1-10' o '001,003,007'. "
                               "Por defecto incluye TODOS los encontrados en input-dir")
+    parser.add_argument("--variant", type=str, choices=["reference", "covars"], default="reference",
+                         help="Qué variante de heatmaps incluir: 'reference' (modelo solo-imagen, "
+                              "default) o 'covars' (modelo con covariables médicas). No se mezclan.")
     parser.add_argument("--view-labels", type=str, default="1=AP,2=Lateral",
                          help="Etiquetas de cabecera por vista, p.ej. '1=AP,2=Lateral'")
     args = parser.parse_args()
 
     heatmaps_dir = Path(args.input_dir) if args.input_dir else HEATMAPS_DIR
-    out_path = Path(args.output) if args.output else heatmaps_dir / "grid.png"
+    out_path = Path(args.output) if args.output else heatmaps_dir / f"grid_{args.variant}.png"
 
-    entries = load_entries(heatmaps_dir)
+    entries = load_entries(heatmaps_dir, variant=args.variant)
 
     if not entries:
+        heatmap_flag = " --covariates" if args.variant == "covars" else ""
         raise SystemExit(
-            f"No se encontró ningún heatmap en {heatmaps_dir}. "
-            f"Genera algunos primero con: python infer.py --patient <id> --heatmap "
-            f"o python batch_heatmaps.py --patients <rango>"
+            f"No se encontró ningún heatmap de la variante '{args.variant}' en {heatmaps_dir}. "
+            f"Genera algunos primero con: python infer.py --patient <id>{heatmap_flag} --heatmap"
         )
 
     if args.patients:

@@ -1,26 +1,23 @@
 """
 infer.py
 ========
-Script de INFERENCIA: carga el modelo ya entrenado (best_phased_full.pt) y
-lo usa para predecir sobre una radiografía DICOM nueva, fuera del proceso
-de entrenamiento.
+Script de INFERENCIA: carga el modelo ya entrenado y lo usa para predecir
+sobre una radiografía DICOM nueva, fuera del proceso de entrenamiento.
 
-Esto es lo mínimo necesario para "desplegar" el modelo:
-  1. La arquitectura (models/lumosnet.py)
-  2. Los pesos entrenados (outputs/best_phased_full.pt)
-  3. El mismo preprocesamiento usado en entrenamiento (CLAHE, resize, CLAHE,
-     normalización ImageNet)
+Soporta dos variantes del modelo:
+  - Referencia (best_phased_full.pt): solo imagen.
+  - Con covariables (best_phased_full_covars.pt, --covariates): imagen +
+    edad/sexo/IMC del paciente, leídos automáticamente de
+    res/processed/metadata.csv. Solo funciona con --patient (no con
+    --dicom suelto), porque necesita saber de qué paciente son esos datos
+    clínicos.
 
 Uso:
-    # Ruta directa a un archivo .dcm concreto
-    python infer.py --dicom "ruta/a/una/radiografia.dcm"
-    python infer.py --dicom "ruta/a/una/radiografia.dcm" --heatmap
-
-    # O, más cómodo: solo el ID de paciente del dataset LUMOS.
-    # Busca automáticamente dentro de res/dataset/ la carpeta del paciente
-    # y usa su primera radiografía (o la que indiques con --view).
+    # Modelo de referencia (solo imagen)
     python infer.py --patient 001 --heatmap
-    python infer.py --patient lumos_x_001 --view 2 --heatmap
+
+    # Modelo con covariables médicas
+    python infer.py --patient 001 --covariates --heatmap
 
 Salida:
     - Clase predicha (Sano / Osteopenia / Osteoporosis) con su probabilidad
@@ -33,22 +30,25 @@ Salida:
 import argparse
 import csv
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import cv2
 import torch
 import torchvision.transforms as T
 
 from data.df_import import read_image          # AJUSTA al nombre real de tu módulo
+from data.dataloaders import MEDICAL_COVARIATES, PROC_DIR, _encode_categorical_columns
 from models.lumosnet import LumosNet, get_device
 from evaluation.gradcam import generate_heatmap
 
 ROOT = Path(__file__).resolve().parent
-MODEL_PATH = ROOT / "outputs" / "best_phased_full.pt"
+OUT_DIR = ROOT / "outputs"
 DATASET_ROOT = ROOT / "res" / "dataset"
-RESULTS_CSV = ROOT / "outputs" / "inference_log.csv"
+RESULTS_CSV = OUT_DIR / "inference_log.csv"
 HEATMAPS_DIR = ROOT / "heatmaps"
 
 IMG_SIZE = 224
@@ -62,21 +62,25 @@ def normalize_patient_id(patient: str) -> str:
     return f"lumos_x_{int(patient):03d}" if patient.isdigit() else patient
 
 
+def patient_id_to_int(patient: str) -> int:
+    """'001', '1' o 'lumos_x_001' -> 1 (el patient_id entero usado en metadata.csv)."""
+    if patient.isdigit():
+        return int(patient)
+    m = re.match(r"lumos_x_0*(\d+)$", patient)
+    if m:
+        return int(m.group(1))
+    raise ValueError(f"No se pudo extraer un ID numérico de paciente de '{patient}'")
+
+
 def resolve_dicom_path(patient: str, view: int = 1, dataset_root: Path = DATASET_ROOT) -> Path:
     """
     Dado un ID de paciente del dataset LUMOS (p.ej. "001" o "lumos_x_001"),
     busca automáticamente su carpeta dentro de dataset_root y devuelve la
     ruta al archivo .dcm/.Dcm correspondiente a `view` (1 = primera vista,
     2 = segunda, etc. -- coincide con lumos_x_001_1.Dcm, lumos_x_001_2.Dcm...).
-
-    No hace falta escribir la ruta completa cada vez: solo el número de
-    paciente.
     """
     patient_id = normalize_patient_id(patient)
 
-    # La carpeta intermedia (p.ej. "lumos_x_001_280_dcm") puede variar, así
-    # que buscamos cualquier carpeta que se llame exactamente patient_id
-    # dentro de dataset_root, sea cual sea su carpeta contenedora.
     candidate_dirs = [p for p in dataset_root.rglob(patient_id) if p.is_dir()]
     if not candidate_dirs:
         raise FileNotFoundError(
@@ -97,13 +101,67 @@ def resolve_dicom_path(patient: str, view: int = 1, dataset_root: Path = DATASET
     return files[view - 1]
 
 
-def load_model(device):
-    """Reconstruye la arquitectura y carga los pesos entrenados."""
-    model = LumosNet(pretrained=False)   # arquitectura vacía: los pesos vienen del .pt
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+# =====================================================================
+# COVARIABLES MÉDICAS (edad, sexo, IMC)
+# =====================================================================
+def build_covariate_lookup():
+    """
+    Recalcula, a partir de res/processed/metadata.csv, EXACTAMENTE la misma
+    codificación y normalización que se usó en entrenamiento
+    (data/dataloaders.py):
+      - codificación de columnas de texto (p.ej. gender) sobre TODO el dataset
+      - media/std para z-score calculadas SOLO sobre el split de train
+
+    Devuelve (meta_codificado, stats), reutilizables para varios pacientes
+    sin releer el CSV cada vez.
+    """
+    meta = pd.read_csv(PROC_DIR / "metadata.csv")
+    meta = _encode_categorical_columns(meta, MEDICAL_COVARIATES)
+
+    train_meta = meta[meta["split"] == "train"]
+    stats = {
+        col: (train_meta[col].mean(), train_meta[col].std() or 1.0)
+        for col in MEDICAL_COVARIATES
+    }
+    return meta, stats
+
+
+def get_patient_covariates(patient_id_int: int, meta: pd.DataFrame, stats: dict) -> torch.Tensor:
+    """Devuelve el vector de covariables normalizado (1, num_covariates) para un paciente."""
+    rows = meta[meta["patient_id"] == patient_id_int]
+    if rows.empty:
+        raise ValueError(
+            f"Paciente {patient_id_int} no encontrado en {PROC_DIR / 'metadata.csv'}. "
+            f"¿Es un paciente del dataset LUMOS original?"
+        )
+    row = rows.iloc[0]
+
+    values = []
+    for col in MEDICAL_COVARIATES:
+        mean, std = stats[col]
+        raw = float(row[col])
+        values.append((raw - mean) / std)
+
+    return torch.tensor(values, dtype=torch.float32).unsqueeze(0)  # (1, num_covariates)
+
+
+def load_model(device, num_covariates: int = 0):
+    """Reconstruye la arquitectura correcta y carga los pesos entrenados."""
+    tag = "phased_full" + ("_covars" if num_covariates > 0 else "")
+    model_path = OUT_DIR / f"best_{tag}.pt"
+
+    if not model_path.exists():
+        raise FileNotFoundError(
+            f"No se encontró {model_path}. Entrena primero con "
+            f"training.train --strategy phased --data full"
+            + (" --covariates" if num_covariates > 0 else "")
+        )
+
+    model = LumosNet(pretrained=False, num_covariates=num_covariates)
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
     model.eval()
-    return model
+    return model, model_path
 
 
 def preprocess(dicom_path: str):
@@ -134,16 +192,19 @@ def preprocess(dicom_path: str):
     return tensor, img
 
 
-def predict(model, image_tensor, device):
+def predict(model, image_tensor, device, covariates=None):
     image_tensor = image_tensor.to(device)
+    if covariates is not None:
+        covariates = covariates.to(device)
     with torch.no_grad():
-        logits, bmd_pred = model(image_tensor)
+        logits, bmd_pred = model(image_tensor, covariates)
         probs = torch.softmax(logits, dim=1)[0].cpu().numpy()
         bmd = bmd_pred.item()
     return probs, bmd
 
 
-def save_heatmap(model, image_tensor, base_img_uint8_gray, target, class_idx, out_path):
+def save_heatmap(model, image_tensor, base_img_uint8_gray, target, class_idx, out_path,
+                  covariates=None):
     """
     base_img_uint8_gray: array (224,224) uint8, tras CLAHE, SIN normalizar.
     pytorch-grad-cam espera la imagen de fondo como RGB float en [0,1].
@@ -159,6 +220,7 @@ def save_heatmap(model, image_tensor, base_img_uint8_gray, target, class_idx, ou
         base_rgb_float,
         target=target,
         class_idx=class_idx,
+        covariates=covariates,
     )
 
     # show_cam_on_image devuelve RGB; cv2.imwrite espera BGR.
@@ -197,13 +259,17 @@ def append_result_csv(result: dict, csv_path: Path = RESULTS_CSV):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dicom", type=str, default=None,
-                         help="Ruta directa a un archivo DICOM (tiene prioridad sobre --patient)")
+                         help="Ruta directa a un archivo DICOM (tiene prioridad sobre --patient). "
+                              "Incompatible con --covariates.")
     parser.add_argument("--patient", type=str, default=None,
                          help="ID de paciente del dataset LUMOS (p.ej. '001' o 'lumos_x_001'). "
                               "Busca automáticamente el archivo en res/dataset/, sin escribir la ruta completa")
     parser.add_argument("--view", type=int, default=1,
                          help="Qué radiografía del paciente usar si --patient tiene varias vistas "
                               "(1=primera, 2=segunda...). Default: 1")
+    parser.add_argument("--covariates", action="store_true",
+                         help=f"Usa el modelo con covariables médicas ({MEDICAL_COVARIATES}), "
+                              f"leídas automáticamente del paciente. Requiere --patient.")
     parser.add_argument("--heatmap", action="store_true",
                          help="Genera además un mapa de calor Grad-CAM sobre la radiografía")
     parser.add_argument("--heatmap-target", type=str, default="classification",
@@ -220,6 +286,10 @@ def main():
                          help="No guardar los resultados numéricos (ni el .json ni el .csv acumulativo)")
     args = parser.parse_args()
 
+    if args.covariates and not args.patient:
+        parser.error("--covariates requiere --patient (necesita saber de qué paciente "
+                      "leer edad/sexo/IMC de metadata.csv)")
+
     if args.dicom:
         dicom_path = Path(args.dicom)
     elif args.patient:
@@ -228,13 +298,22 @@ def main():
         parser.error("Debes indicar --dicom <ruta> o --patient <id>")
 
     device = get_device()
-    print(f"Cargando modelo desde: {MODEL_PATH}")
+    num_covariates = len(MEDICAL_COVARIATES) if args.covariates else 0
+    model, model_path = load_model(device, num_covariates=num_covariates)
+    print(f"Cargando modelo desde: {model_path}")
     print(f"Device: {device}\n")
 
-    model = load_model(device)
+    covariates = None
+    if args.covariates:
+        patient_id_int = patient_id_to_int(args.patient)
+        meta, stats = build_covariate_lookup()
+        covariates = get_patient_covariates(patient_id_int, meta, stats)
+        print(f"Covariables del paciente {patient_id_int}: "
+              f"{dict(zip(MEDICAL_COVARIATES, [round(v, 3) for v in covariates[0].tolist()]))}\n")
+
     image_tensor, base_img = preprocess(str(dicom_path))
 
-    probs, bmd = predict(model, image_tensor, device)
+    probs, bmd = predict(model, image_tensor, device, covariates)
     pred_class = int(np.argmax(probs))
 
     print(f"Radiografía: {dicom_path}\n")
@@ -251,6 +330,7 @@ def main():
         "dicom_path": str(dicom_path),
         "patient": normalize_patient_id(args.patient) if args.patient else "",
         "view": args.view if args.patient else "",
+        "used_covariates": bool(args.covariates),
         "prob_sano": round(float(probs[0]), 4),
         "prob_osteopenia": round(float(probs[1]), 4),
         "prob_osteoporosis": round(float(probs[2]), 4),
@@ -268,12 +348,12 @@ def main():
             out_path = args.heatmap_out  # ruta explícita del usuario: se respeta tal cual
         else:
             HEATMAPS_DIR.mkdir(parents=True, exist_ok=True)
+            suffix = "_covars" if args.covariates else ""
             if args.patient:
                 patient_id = normalize_patient_id(args.patient)
-                filename = f"heatmap_{patient_id}_imagen{args.view}.png"
+                filename = f"heatmap_{patient_id}_imagen{args.view}{suffix}.png"
             else:
-                # --dicom directo, sin --patient: usa el nombre del propio archivo dicom
-                filename = f"heatmap_{dicom_path.stem}.png"
+                filename = f"heatmap_{dicom_path.stem}{suffix}.png"
             out_path = str(HEATMAPS_DIR / filename)
 
         used_class_idx = save_heatmap(
@@ -281,6 +361,7 @@ def main():
             target=args.heatmap_target,
             class_idx=args.heatmap_class,
             out_path=out_path,
+            covariates=covariates,
         )
 
         result["heatmap_out"] = out_path

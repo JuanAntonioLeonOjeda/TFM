@@ -8,8 +8,11 @@ Reutiliza las mismas funciones que infer.py (carga el modelo una sola vez,
 en vez de relanzar el script por cada paciente).
 
 Uso:
-    # Pacientes 1 al 10, ambas vistas (1=AP, 2=lateral)
+    # Pacientes 1 al 10, ambas vistas (1=AP, 2=lateral), modelo de referencia
     python batch_heatmaps.py --patients 1-10
+
+    # Lo mismo, con el modelo de covariables médicas
+    python batch_heatmaps.py --patients 1-10 --covariates
 
     # Lista concreta de pacientes
     python batch_heatmaps.py --patients 1,5,7,12
@@ -22,28 +25,33 @@ Uso:
 
 Salida:
     - Un heatmap .png + .json por cada (paciente, vista) en heatmaps/
+      (con sufijo _covars si se usa --covariates)
     - Una fila más por cada uno en outputs/inference_log.csv
     - Un resumen final por consola: cuántos se generaron, cuántos se saltaron
 """
 
 import argparse
+from datetime import datetime
 
 import numpy as np
 
 from infer import (
     CLASS_NAMES,
     HEATMAPS_DIR,
+    MEDICAL_COVARIATES,
     append_result_csv,
+    build_covariate_lookup,
     get_device,
+    get_patient_covariates,
     load_model,
     normalize_patient_id,
+    patient_id_to_int,
     predict,
     preprocess,
     resolve_dicom_path,
     save_heatmap,
     save_result_json,
 )
-from datetime import datetime
 
 
 def parse_patient_list(spec: str) -> list[str]:
@@ -72,6 +80,9 @@ def main():
     parser.add_argument("--views", type=str, default="1,2",
                          help="Vistas a generar por paciente (default: '1,2' = AP y lateral). "
                               "Usa '2' para procesar solo laterales")
+    parser.add_argument("--covariates", action="store_true",
+                         help=f"Usa el modelo con covariables médicas ({MEDICAL_COVARIATES}) "
+                              f"en vez del modelo de referencia")
     parser.add_argument("--heatmap-target", type=str, default="classification",
                          choices=["classification", "bmd"])
     args = parser.parse_args()
@@ -80,20 +91,37 @@ def main():
     views = [int(v.strip()) for v in args.views.split(",") if v.strip()]
 
     print(f"Pacientes a procesar: {len(patients)}")
-    print(f"Vistas por paciente:  {views}\n")
+    print(f"Vistas por paciente:  {views}")
+    print(f"Covariables médicas:  {'sí, ' + str(MEDICAL_COVARIATES) if args.covariates else 'no'}\n")
 
     device = get_device()
     print(f"Device: {device}")
     print("Cargando modelo...\n")
-    model = load_model(device)
+
+    num_covariates = len(MEDICAL_COVARIATES) if args.covariates else 0
+    model, model_path = load_model(device, num_covariates=num_covariates)
+    print(f"Modelo: {model_path}\n")
+
+    covariate_meta, covariate_stats = (build_covariate_lookup() if args.covariates else (None, None))
 
     HEATMAPS_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = "_covars" if args.covariates else ""
 
     generated = 0
     skipped = 0
 
     for patient in patients:
         patient_id = normalize_patient_id(patient)
+
+        covariates = None
+        if args.covariates:
+            try:
+                patient_id_int = patient_id_to_int(patient)
+                covariates = get_patient_covariates(patient_id_int, covariate_meta, covariate_stats)
+            except ValueError as e:
+                print(f"[SALTADO] {patient_id}: {e}")
+                skipped += len(views)
+                continue
 
         for view in views:
             try:
@@ -104,16 +132,17 @@ def main():
                 continue
 
             image_tensor, base_img = preprocess(str(dicom_path))
-            probs, bmd = predict(model, image_tensor, device)
+            probs, bmd = predict(model, image_tensor, device, covariates)
             pred_class = int(np.argmax(probs))
 
-            out_path = str(HEATMAPS_DIR / f"heatmap_{patient_id}_imagen{view}.png")
+            out_path = str(HEATMAPS_DIR / f"heatmap_{patient_id}_imagen{view}{suffix}.png")
 
             used_class_idx = save_heatmap(
                 model, image_tensor, base_img,
                 target=args.heatmap_target,
                 class_idx=None,  # explica siempre la clase predicha
                 out_path=out_path,
+                covariates=covariates,
             )
 
             result = {
@@ -121,6 +150,7 @@ def main():
                 "dicom_path": str(dicom_path),
                 "patient": patient_id,
                 "view": view,
+                "used_covariates": bool(args.covariates),
                 "prob_sano": round(float(probs[0]), 4),
                 "prob_osteopenia": round(float(probs[1]), 4),
                 "prob_osteoporosis": round(float(probs[2]), 4),
@@ -142,7 +172,9 @@ def main():
     print("--- Resumen ---")
     print(f"Heatmaps generados: {generated}")
     print(f"Saltados (no encontrados): {skipped}")
+    variant = "covars" if args.covariates else "reference"
     print(f"Revisa outputs/inference_log.csv y la carpeta heatmaps/ para comparar patrones.")
+    print(f"Para montar la cuadrícula: python make_grid.py --variant {variant}")
 
 
 if __name__ == "__main__":
