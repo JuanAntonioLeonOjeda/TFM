@@ -1,22 +1,7 @@
-"""
-export_for_review.py
-=====================
-Prepara los pacientes ACEPTADOS por auto_label_bboxes.py para revisarlos y
-corregirlos en makesense.ai (gratis, en el navegador, sin instalar nada:
-https://www.makesense.ai/).
+"""Copia los pacientes aceptados (train+val) a res/yolo_dataset/review_session/ para revisarlos en makesense.ai.
 
-Junta las imágenes de train+val en una sola carpeta (más cómodo para
-revisar todo de una sentada) y genera classes.txt, que makesense.ai pide
-al importar anotaciones YOLO ya existentes.
-
-Uso:
-    python export_for_review.py
-
-Salida:
-    res/yolo_dataset/review_session/
-        images/*.jpg      <- arrastra ESTA carpeta a makesense.ai
-        labels/*.txt       <- las anotaciones actuales, para importar
-        classes.txt        <- nombres de clase (una por línea)
+Uso: python -m yolo.export_review
+Siguiente paso: corregir en makesense.ai y luego python -m yolo.reintegrate --csv export.csv
 """
 
 import shutil

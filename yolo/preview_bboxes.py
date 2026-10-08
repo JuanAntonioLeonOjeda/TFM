@@ -1,19 +1,6 @@
-"""
-preview_bboxes.py
-==================
-Dibuja las cajas delimitadoras auto-generadas (por auto_label_bboxes.py)
-sobre sus radiografías correspondientes, y las monta en una cuadrícula,
-para poder inspeccionar visualmente su calidad ANTES de entrenar YOLO con
-ellas.
+"""Dibuja las cajas aceptadas de review.csv sobre sus imágenes, en cuadrícula, para revisarlas.
 
-Es el paso equivalente a la figura roi_grid_preview de tu memoria (donde
-comprobaste visualmente si el recorte fijo tenía sentido), pero para las
-cajas adaptativas.
-
-Uso:
-    python preview_bboxes.py
-    python preview_bboxes.py --n 30
-    python preview_bboxes.py --only-split train
+Uso: python -m yolo.preview_bboxes [--n 30] [--only-split train]
 """
 
 import argparse
@@ -30,14 +17,18 @@ LABEL_HEIGHT = 20
 COLS = 6
 
 
-def draw_box_on_image(img_path: Path, x0: int, y0: int, x1: int, y1: int) -> Image.Image:
-    img = cv2.imread(str(img_path))
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    cv2.rectangle(img, (int(x0), int(y0)), (int(x1), int(y1)), (255, 60, 60), 3)
-    return Image.fromarray(img)
+def draw_yolo_box(img_path: Path, label_path: Path) -> tuple[Image.Image, float]:
+    """Dibuja la caja de labels/*.txt (no de review.csv: tras reintegrate ya no tiene píxeles)."""
+    img = cv2.cvtColor(cv2.imread(str(img_path)), cv2.COLOR_BGR2RGB)
+    h, w = img.shape[:2]
+    _, xc, yc, bw, bh = map(float, label_path.read_text().split())
+    x0, y0 = int((xc - bw / 2) * w), int((yc - bh / 2) * h)
+    x1, y1 = int((xc + bw / 2) * w), int((yc + bh / 2) * h)
+    cv2.rectangle(img, (x0, y0), (x1, y1), (255, 60, 60), 3)
+    return Image.fromarray(img), bw * bh
 
 
-def build_grid(rows: list[dict], images_dir_by_split: dict, out_path: Path, cols: int = COLS):
+def build_grid(rows: list[dict], dataset_dir: Path, out_path: Path, cols: int = COLS):
     n = len(rows)
     if n == 0:
         raise SystemExit("No hay filas aceptadas que mostrar.")
@@ -53,13 +44,13 @@ def build_grid(rows: list[dict], images_dir_by_split: dict, out_path: Path, cols
         r, c = divmod(i, cols)
         x, y = c * cell_w, r * cell_h
 
-        split = row["split"]
-        img_path = images_dir_by_split[split] / f"{row['patient']}.jpg"
-        thumb = draw_box_on_image(img_path, row["x0"], row["y0"], row["x1"], row["y1"])
+        patient, split = row["patient"], row["split"]
+        thumb, area_frac = draw_yolo_box(dataset_dir / "images" / split / f"{patient}.jpg",
+                                         dataset_dir / "labels" / split / f"{patient}.txt")
         thumb.thumbnail((THUMB_SIZE, THUMB_SIZE))
         grid.paste(thumb, (x, y))
 
-        label = f"{row['patient']}  ({row['area_frac']:.2f})"
+        label = f"{patient}  ({area_frac:.2f})"
         draw.text((x + 4, y + THUMB_SIZE + 2), label, font=font, fill="black")
 
     grid.save(out_path)
@@ -69,10 +60,8 @@ def build_grid(rows: list[dict], images_dir_by_split: dict, out_path: Path, cols
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-dir", type=str, default=str(YOLO_DATASET_DIR))
-    parser.add_argument("--n", type=int, default=50,
-                         help="Cuántas cajas mostrar como máximo (muestreo aleatorio si hay más). Default: 50")
-    parser.add_argument("--only-split", type=str, choices=["train", "val"], default=None,
-                         help="Filtra solo un split concreto (por defecto, mezcla ambos)")
+    parser.add_argument("--n", type=int, default=50, help="Máximo de cajas (muestra aleatoria)")
+    parser.add_argument("--only-split", type=str, choices=["train", "val"], default=None)
     parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
@@ -90,15 +79,8 @@ def main():
     if len(accepted) > args.n:
         accepted = accepted.sample(n=args.n, random_state=args.seed)
 
-    rows = accepted.to_dict("records")
-
-    images_dir_by_split = {
-        "train": dataset_dir / "images" / "train",
-        "val": dataset_dir / "images" / "val",
-    }
-
     out_path = Path(args.output) if args.output else dataset_dir / "preview_grid.png"
-    build_grid(rows, images_dir_by_split, out_path)
+    build_grid(accepted.to_dict("records"), dataset_dir, out_path)
 
 
 if __name__ == "__main__":

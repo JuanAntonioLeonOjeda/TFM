@@ -1,15 +1,10 @@
-"""
-show_patient.py
-================
-Muestra todas las radiografías de un paciente concreto, junto con su
-Series Description (vista AP/lateral) y sus dimensiones.
+"""Muestra todas las radiografías de un paciente con su SeriesDescription y dimensiones.
 
-Uso:
-    python show_patient.py --patient 1
-    python show_patient.py --patient 1 --raw   (sin normalizar/CLAHE, tal cual el DICOM)
+Uso: python -m data.checks.show_patient --patient 1 [--raw]
 """
 
 import argparse
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +13,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from data.df_import import load_image_index, read_image  # AJUSTA al nombre real de tu módulo
+from data.df_import import load_image_index, read_image
 
 
 def main():
@@ -67,7 +62,6 @@ def main():
     plt.savefig(out_path, dpi=130, bbox_inches="tight")
     print(f"Guardado: {out_path}")
 
-    import subprocess
     subprocess.run(["open", out_path])
 
 

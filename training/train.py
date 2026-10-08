@@ -1,24 +1,11 @@
-"""
-train.py
-========
-Generic training loop for the multitask LumosNet (classification + BMD regression).
-Supports both the full dataset and the AP+ROI dataset via --data.
-The transfer-learning strategy is pluggable (see training/strategies/).
+"""Entrenamiento multitarea de LumosNet (clasificación + regresión de BMD).
 
-Run:
-    python -m training.train --strategy differential --data full
-    python -m training.train --strategy phased        --data roi
-    python -m training.train --strategy phased        --data full --class-weighting inverse
-    python -m training.train --strategy phased        --data full --covariates
-
-Outputs (in outputs/):
-    best_<strategy>_<data>[_cw<scheme>][_covars].pt      best model weights
-    history_<strategy>_<data>[_cw<scheme>][_covars].png  loss / accuracy / rmse curves
+Uso: python -m training.train --strategy phased --data full [--class-weighting inverse] [--covariates]
+Salida: outputs/best_<tag>.pt y outputs/history_<tag>.png
 """
 
 import argparse
 import random
-from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -28,34 +15,38 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from data.dataloaders import make_dataloaders, MEDICAL_COVARIATES
+from data.dataloaders import DATASETS, MEDICAL_COVARIATES, make_dataloaders
+from data.df_import import PROJECT_ROOT
 from models.lumosnet import LumosNet, get_device
 from training.strategies.differential import DifferentialStrategy
 from training.strategies.phased import PhasedStrategy
 
-ROOT = Path(__file__).resolve().parent.parent
-OUT_DIR = ROOT / "outputs"
+OUT_DIR = PROJECT_ROOT / "outputs"
 
 EPOCHS = 50
 BATCH_SIZE = 32
 BMD_WEIGHT = 10.0
 PATIENCE = 7
 SEED = 42
-NUM_CLASSES = 3  # Sano / Osteopenia / Osteoporosis
+NUM_CLASSES = 3
 
 STRATEGIES = {
     "differential": DifferentialStrategy,
     "phased": PhasedStrategy,
 }
+CLASS_WEIGHTING = ["none", "inverse", "effective"]
 
-# which files each --data option points to
-DATASETS = {
-    "full": {"img_file": "images.npy", "meta_file": "metadata.csv"},
-    "roi":  {"img_file": "images_roi.npy", "meta_file": "metadata_roi.csv"},
-    "roi_hybrid": {"img_file": "images_roi_hybrid.npy", "meta_file": "metadata_roi_hybrid.csv"},
-    "hires": {"img_file": "images_320.npy", "meta_file": "metadata_320.csv"},
-    "roi_yolo": {"img_file": "images_roi_yolo.npy", "meta_file": "metadata_roi_yolo.csv"}
-}
+
+def run_tag(strategy: str, data_name: str, class_weighting: str = "none",
+            use_covariates: bool = False) -> str:
+    """Nombre del experimento, usado en checkpoints y figuras."""
+    tag = f"{strategy}_{data_name}"
+    if class_weighting != "none":
+        tag += f"_cw{class_weighting}"
+    if use_covariates:
+        tag += "_covars"
+    return tag
+
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -64,80 +55,35 @@ def set_seed(seed: int):
     torch.cuda.manual_seed_all(seed)
 
 
-# =====================================================================
-# CLASS WEIGHTING
-# =====================================================================
-def get_train_labels(loader) -> torch.Tensor:
-    """
-    Obtiene las etiquetas del split de entrenamiento a partir del DataFrame
-    de metadatos que dataloaders.py expone en ds.meta_subset (columna
-    "label"), sin depender de cómo esté implementado LumosDataset por dentro.
-    """
-    ds = loader.dataset
-
-    if hasattr(ds, "meta_subset") and "label" in ds.meta_subset.columns:
-        return torch.as_tensor(ds.meta_subset["label"].values, dtype=torch.long)
-
-    print("[aviso] ds.meta_subset no disponible: calculando etiquetas iterando "
-          "el DataLoader completo (más lento, pero funciona igual).")
-    all_labels = []
-    for batch in loader:
-        all_labels.append(batch[1])  # (images, labels, bmd, [covariates])
-    return torch.cat(all_labels)
-
-
-def compute_class_weights(loader, num_classes: int = NUM_CLASSES,
-                           scheme: str = "none", beta: float = 0.999):
-    """
-    scheme: "none" | "inverse" | "effective" (ver detalle en la memoria).
-    """
+def compute_class_weights(labels: torch.Tensor, num_classes: int = NUM_CLASSES,
+                          scheme: str = "none", beta: float = 0.999):
     if scheme == "none":
         return None
 
-    labels = get_train_labels(loader)
     counts = torch.bincount(labels, minlength=num_classes).float()
-
     if scheme == "inverse":
         weights = counts.sum() / (num_classes * counts)
     elif scheme == "effective":
+        # Cui et al. 2019, "Class-Balanced Loss Based on Effective Number of Samples"
         effective_num = 1.0 - torch.pow(torch.tensor(beta), counts)
         weights = (1.0 - beta) / effective_num
-        weights = weights / weights.sum() * num_classes  # normaliza a media 1
+        weights = weights / weights.sum() * num_classes
     else:
         raise ValueError(f"Esquema de balanceo desconocido: {scheme}")
-
     return weights
 
 
-# =====================================================================
-# LOSS
-# =====================================================================
 def compute_loss(logits, bmd_pred, labels, bmd_true, ce, mse):
-    loss_cls = ce(logits, labels)
-    loss_reg = mse(bmd_pred, bmd_true)
-    return loss_cls + BMD_WEIGHT * loss_reg
+    return ce(logits, labels) + BMD_WEIGHT * mse(bmd_pred, bmd_true)
 
 
 def unpack_batch(batch, use_covariates: bool, device):
-    """
-    Desempaqueta un batch del DataLoader, que tiene 3 elementos
-    (images, labels, bmd) sin covariables, o 4 (+ covariates) con ellas.
-    Mueve todo al device correspondiente.
-    """
-    if use_covariates:
-        images, labels, bmd, covariates = batch
-        covariates = covariates.to(device)
-    else:
-        images, labels, bmd = batch
-        covariates = None
-
-    images, labels, bmd = images.to(device), labels.to(device), bmd.to(device)
+    """Batch de 3 elementos (image, label, bmd) o 4 (+ covariates)."""
+    images, labels, bmd = (t.to(device) for t in batch[:3])
+    covariates = batch[3].to(device) if use_covariates else None
     return images, labels, bmd, covariates
 
 
-# =====================================================================
-# TRAIN / EVAL FOR ONE EPOCH
-# =====================================================================
 def train_one_epoch(model, loader, optimizer, ce, mse, device, use_covariates: bool):
     model.train()
     running = 0.0
@@ -156,6 +102,7 @@ def train_one_epoch(model, loader, optimizer, ce, mse, device, use_covariates: b
 
 @torch.no_grad()
 def evaluate(model, loader, ce, mse, device, use_covariates: bool):
+    """Devuelve (loss, accuracy, rmse) por imagen."""
     model.eval()
     running, correct, sq_err, n = 0.0, 0, 0.0, 0
     for batch in loader:
@@ -172,9 +119,6 @@ def evaluate(model, loader, ce, mse, device, use_covariates: bool):
     return running / n, correct / n, (sq_err / n) ** 0.5
 
 
-# =====================================================================
-# MAIN TRAINING LOOP
-# =====================================================================
 def train(strategy_name: str, data_name: str, class_weighting: str = "none",
           use_covariates: bool = False):
     set_seed(SEED)
@@ -182,31 +126,22 @@ def train(strategy_name: str, data_name: str, class_weighting: str = "none",
     device = get_device()
 
     strategy = STRATEGIES[strategy_name]()
-    files = DATASETS[data_name]
-    tag = f"{strategy_name}_{data_name}"
-    if class_weighting != "none":
-        tag += f"_cw{class_weighting}"
-    if use_covariates:
-        tag += "_covars"
+    tag = run_tag(strategy_name, data_name, class_weighting, use_covariates)
+    covariate_cols = MEDICAL_COVARIATES if use_covariates else None
 
     print(f"Strategy: {strategy_name} | Data: {data_name} | Device: {device} | "
           f"Patience: {PATIENCE} | Class weighting: {class_weighting} | "
-          f"Covariates: {MEDICAL_COVARIATES if use_covariates else 'none'}\n")
+          f"Covariates: {covariate_cols or 'none'}\n")
 
-    covariate_cols = MEDICAL_COVARIATES if use_covariates else None
-    loaders = make_dataloaders(batch_size=BATCH_SIZE, covariate_cols=covariate_cols, **files)
+    loaders = make_dataloaders(batch_size=BATCH_SIZE, covariate_cols=covariate_cols, **DATASETS[data_name])
+    model = LumosNet(pretrained=True, num_covariates=len(covariate_cols or [])).to(device)
 
-    num_covariates = len(MEDICAL_COVARIATES) if use_covariates else 0
-    model = LumosNet(pretrained=True, num_covariates=num_covariates).to(device)
-
-    class_weights = compute_class_weights(loaders["train"], scheme=class_weighting)
+    train_labels = torch.as_tensor(loaders["train"].dataset.meta["label"].values, dtype=torch.long)
+    class_weights = compute_class_weights(train_labels, scheme=class_weighting)
     if class_weights is not None:
-        print(f"Pesos de clase ({class_weighting}): "
-              f"{[round(w, 3) for w in class_weights.tolist()]}\n")
-        ce = nn.CrossEntropyLoss(weight=class_weights.to(device))
-    else:
-        ce = nn.CrossEntropyLoss()
-
+        print(f"Pesos de clase ({class_weighting}): {[round(w, 3) for w in class_weights.tolist()]}\n")
+        class_weights = class_weights.to(device)
+    ce = nn.CrossEntropyLoss(weight=class_weights)
     mse = nn.MSELoss()
 
     optimizer = strategy.build_optimizer(model)
@@ -278,17 +213,16 @@ def plot_history(history, tag, best_epoch):
     print(f"Saved: {path}")
 
 
+def add_experiment_args(parser: argparse.ArgumentParser):
+    """Argumentos que identifican un experimento; compartidos por train y evaluate."""
+    parser.add_argument("--strategy", choices=list(STRATEGIES), default="phased")
+    parser.add_argument("--data", choices=list(DATASETS), default="full")
+    parser.add_argument("--class-weighting", choices=CLASS_WEIGHTING, default="none")
+    parser.add_argument("--covariates", action="store_true", help=f"Añade {MEDICAL_COVARIATES}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--strategy", choices=list(STRATEGIES.keys()), default="phased")
-    parser.add_argument("--data", choices=list(DATASETS.keys()), default="full",
-                        help="'full' = both views, 'roi' = AP-only cropped")
-    parser.add_argument("--class-weighting", choices=["none", "inverse", "effective"],
-                        default="none",
-                        help="Esquema de ponderación de clases en la pérdida de "
-                             "clasificación (default: none, sin ponderar)")
-    parser.add_argument("--covariates", action="store_true",
-                        help=f"Añadir covariables médicas fijas del proyecto: {MEDICAL_COVARIATES}")
+    add_experiment_args(parser)
     args = parser.parse_args()
-
     train(args.strategy, args.data, args.class_weighting, args.covariates)

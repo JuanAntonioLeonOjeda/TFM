@@ -1,20 +1,6 @@
-"""
-make_grid.py
-============
-Monta todos los heatmaps generados en heatmaps/ en una ÚNICA imagen tipo
-cuadrícula: una fila por paciente, una columna por vista (AP / lateral...),
-con la predicción y confianza como etiqueta bajo cada imagen.
+"""Monta los heatmaps de heatmaps/ en una cuadrícula: una fila por paciente, una columna por vista.
 
-Pensado para comparar de un vistazo el patrón que viste (AP centrado en la
-columna vs. lateral desviado), en vez de abrir imagen por imagen.
-
-Uso:
-    python make_grid.py
-    python make_grid.py --patients 1-10
-    python make_grid.py --output outputs/grid_ap_vs_lateral.png
-
-Requiere: Pillow (pip install Pillow) -- muy probable que ya la tengas
-instalada como dependencia indirecta de torchvision/opencv.
+Uso: python -m evaluation.heatmap_grid [--patients 1-10] [--variant covars]
 """
 
 import argparse
@@ -24,31 +10,23 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from infer import HEATMAPS_DIR
+from infer import HEATMAPS_DIR, normalize_patient_id, parse_patient_list
 
-THUMB_SIZE = 260          # tamaño de cada imagen dentro de la cuadrícula
-LABEL_HEIGHT = 60         # alto del área de texto bajo cada imagen
-HEADER_HEIGHT = 40        # alto de la fila de cabeceras (Vista 1, Vista 2...)
-ROW_LABEL_WIDTH = 0       # sin columna de ID de paciente
+THUMB_SIZE = 260
+LABEL_HEIGHT = 60
+HEADER_HEIGHT = 40
+ROW_LABEL_WIDTH = 0
 PADDING = 8
 FILENAME_RE = re.compile(r"heatmap_(?P<patient>.+)_imagen(?P<view>\d+)(?P<variant>_covars)?\.png$")
 
 
 def natural_key(patient_id: str):
-    """Ordena 'lumos_x_002' antes que 'lumos_x_010' (orden numérico, no alfabético)."""
     m = re.search(r"(\d+)$", patient_id)
     return int(m.group(1)) if m else patient_id
 
 
 def load_entries(heatmaps_dir: Path, variant: str = "reference"):
-    """
-    Escanea heatmaps_dir y devuelve un dict {patient_id: {view: (png_path, meta_dict)}}
-    meta_dict viene del .json correspondiente si existe (predicted_class, probs...).
-
-    variant: "reference" (heatmap_..._imagenN.png, sin sufijo) o "covars"
-        (heatmap_..._imagenN_covars.png). Nunca se mezclan en la misma
-        cuadrícula, porque una celda no puede mostrar dos heatmaps a la vez.
-    """
+    """{patient_id: {view: (png_path, meta_del_json)}} solo de la variante pedida ('reference' o 'covars')."""
     entries = {}
     for png_path in heatmaps_dir.glob("heatmap_*_imagen*.png"):
         m = FILENAME_RE.match(png_path.name)
@@ -99,7 +77,7 @@ def build_grid(entries: dict, out_path: Path, view_labels: dict):
     views = sorted({v for views in entries.values() for v in views})
 
     if not patients or not views:
-        raise ValueError("No se encontraron heatmaps que combinar. ¿Ejecutaste infer.py/batch_heatmaps.py con --heatmap antes?")
+        raise ValueError("No se encontraron heatmaps que combinar. Genera antes con infer.py --heatmap o evaluation.batch_heatmaps.")
 
     n_rows = len(patients)
     n_cols = len(views)
@@ -114,13 +92,11 @@ def build_grid(entries: dict, out_path: Path, view_labels: dict):
     draw = ImageDraw.Draw(grid)
     font = ImageFont.load_default()
 
-    # Cabeceras de columna (nombre de cada vista)
     for c, view in enumerate(views):
         x = ROW_LABEL_WIDTH + c * (cell_w + PADDING) + PADDING
         header_text = view_labels.get(view, f"Vista {view}")
         draw_centered_text(draw, (x, PADDING), header_text, font, cell_w)
 
-    # Filas: una por paciente
     for r, patient_id in enumerate(patients):
         y = HEADER_HEIGHT + r * (cell_h + PADDING) + PADDING
 
@@ -131,7 +107,6 @@ def build_grid(entries: dict, out_path: Path, view_labels: dict):
                 png_path, meta = entries[patient_id][view]
                 thumb = Image.open(png_path).convert("RGB")
                 thumb.thumbnail((THUMB_SIZE, THUMB_SIZE))
-                # centra la miniatura si no es cuadrada tras el resize
                 paste_x = x + (THUMB_SIZE - thumb.width) // 2
                 paste_y = y + (THUMB_SIZE - thumb.height) // 2
                 grid.paste(thumb, (paste_x, paste_y))
@@ -150,18 +125,11 @@ def build_grid(entries: dict, out_path: Path, view_labels: dict):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input-dir", type=str, default=None,
-                         help="Carpeta con los heatmaps (default: heatmaps/, la misma que usa infer.py)")
-    parser.add_argument("--output", type=str, default=None,
-                         help="Ruta de la imagen final (default: heatmaps/grid.png)")
-    parser.add_argument("--patients", type=str, default=None,
-                         help="Filtra solo estos pacientes, p.ej. '1-10' o '001,003,007'. "
-                              "Por defecto incluye TODOS los encontrados en input-dir")
-    parser.add_argument("--variant", type=str, choices=["reference", "covars"], default="reference",
-                         help="Qué variante de heatmaps incluir: 'reference' (modelo solo-imagen, "
-                              "default) o 'covars' (modelo con covariables médicas). No se mezclan.")
-    parser.add_argument("--view-labels", type=str, default="1=AP,2=Lateral",
-                         help="Etiquetas de cabecera por vista, p.ej. '1=AP,2=Lateral'")
+    parser.add_argument("--input-dir", type=str, default=None)
+    parser.add_argument("--output", type=str, default=None)
+    parser.add_argument("--patients", type=str, default=None, help="p.ej. '1-10' o '001,003,007'")
+    parser.add_argument("--variant", type=str, choices=["reference", "covars"], default="reference")
+    parser.add_argument("--view-labels", type=str, default="1=AP,2=Lateral")
     args = parser.parse_args()
 
     heatmaps_dir = Path(args.input_dir) if args.input_dir else HEATMAPS_DIR
@@ -177,15 +145,7 @@ def main():
         )
 
     if args.patients:
-        from infer import normalize_patient_id
-        wanted = set()
-        for chunk in args.patients.split(","):
-            chunk = chunk.strip()
-            if "-" in chunk and chunk.replace("-", "").isdigit():
-                start, end = chunk.split("-")
-                wanted.update(normalize_patient_id(str(i)) for i in range(int(start), int(end) + 1))
-            else:
-                wanted.add(normalize_patient_id(chunk))
+        wanted = {normalize_patient_id(p) for p in parse_patient_list(args.patients)}
 
         filtered = {pid: v for pid, v in entries.items() if pid in wanted}
         if not filtered:
@@ -193,7 +153,7 @@ def main():
                 f"Hay {len(entries)} paciente(s) con heatmaps en {heatmaps_dir}, "
                 f"pero ninguno coincide con --patients {args.patients}. "
                 f"Pacientes disponibles: {sorted(entries.keys(), key=natural_key)}. "
-                f"Genera los que faltan con: python batch_heatmaps.py --patients {args.patients}"
+                f"Genera los que faltan con: python -m evaluation.batch_heatmaps --patients {args.patients}"
             )
         entries = filtered
 

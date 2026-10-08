@@ -1,19 +1,13 @@
-"""
-check_resolutions.py
-=====================
-Calcula las dimensiones REALES (ancho, alto) de las 1616 radiografías DICOM
-del dataset, en lugar de estimarlas a partir de una muestra pequeña.
+"""Dimensiones reales (ancho, alto) de todas las radiografías -> resolutions_full.csv.
 
-Uso:
-    python check_resolutions.py
+Uso: python -m data.checks.check_resolutions
 """
 
-from pathlib import Path
 import pydicom
 import numpy as np
 import pandas as pd
 
-from data.df_import import load_image_index  # AJUSTA al nombre real de tu módulo
+from data.df_import import load_image_index
 
 
 def main():
@@ -45,7 +39,6 @@ def main():
     print("\n=== ALTO (Rows) ===")
     print(f"  min: {heights.min()}  max: {heights.max()}  media: {heights.mean():.0f}  mediana: {np.median(heights):.0f}")
 
-    # guardar el detalle completo por si se necesita
     df = pd.DataFrame({"path": images["image_path"], "width": widths, "height": heights})
     df.to_csv("resolutions_full.csv", index=False)
     print("\nGuardado detalle completo en resolutions_full.csv")

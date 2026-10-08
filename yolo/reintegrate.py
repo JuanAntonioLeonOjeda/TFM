@@ -1,21 +1,6 @@
-"""
-reintegrate_corrections.py
-============================
-Toma el CSV exportado de makesense.ai (tras la revisión/corrección manual)
-y actualiza res/yolo_dataset/ con las cajas corregidas.
+"""Aplica a res/yolo_dataset/ las cajas corregidas exportadas de makesense.ai (CSV).
 
-Solo usa las filas cuyo image_name contiene "lumos_x_" -- cualquier fila
-con nombre puramente numérico (1.jpg, 2.jpg...) se ignora, porque son
-residuos de un intento de importación anterior, no pacientes reales
-(ver conversación: los 342 "lumos_x_*" ya cubren el total de aceptados
-por auto_label_bboxes.py, sin que falte ninguno).
-
-Pacientes que estaban aceptados en review.csv pero NO aparecen en el CSV
-corregido se interpretan como DESCARTADOS manualmente durante la revisión
-(los borraste en makesense.ai), y se excluyen del dataset final.
-
-Uso:
-    python reintegrate_corrections.py --csv ruta/al/csv/exportado.csv
+Uso: python -m yolo.reintegrate --csv ruta/al/export.csv
 """
 
 import argparse
@@ -38,11 +23,10 @@ def main():
     review_path = dataset_dir / "review.csv"
 
     corrections = pd.read_csv(args.csv)
+    # Filas sin "lumos" (1.jpg, 2.jpg...) son restos de una importación anterior, no pacientes
     corrections = corrections[corrections["image_name"].str.contains("lumos", case=False)].copy()
     corrections["patient"] = corrections["image_name"].str.replace(".jpg", "", regex=False)
 
-    # Si algún paciente tiene más de una caja (doble anotación por error),
-    # nos quedamos con la primera y avisamos, en vez de fallar.
     dup_counts = corrections.groupby("patient").size()
     duplicated = dup_counts[dup_counts > 1]
     if len(duplicated) > 0:
@@ -55,13 +39,13 @@ def main():
     review = pd.read_csv(review_path)
     previously_accepted = review[review["accepted"] == True].copy()
 
+    # Aceptados que no aparecen en el CSV = borrados a mano durante la revisión
     discarded_by_user = set(previously_accepted["patient"]) - corrected_patients
     if discarded_by_user:
         print(f"\n{len(discarded_by_user)} paciente(s) estaban aceptados pero NO aparecen "
               f"en el CSV corregido -- se interpretan como descartados en la revisión manual:")
         print(f"  {sorted(discarded_by_user)}")
 
-    # Mapa patient -> split (train/val), conservando la asignación original
     patient_to_split = dict(zip(previously_accepted["patient"], previously_accepted["split"]))
 
     updated_rows = []
@@ -79,7 +63,7 @@ def main():
         split = patient_to_split[patient]
         w, h = row["image_width"], row["image_height"]
 
-        # makesense.ai (CSV): bbox_x, bbox_y = esquina superior-izquierda en píxeles
+        # makesense.ai: bbox_x, bbox_y = esquina superior izquierda, en píxeles
         x0, y0 = row["bbox_x"], row["bbox_y"]
         bw, bh = row["bbox_width"], row["bbox_height"]
 
@@ -112,7 +96,6 @@ def main():
         })
         removed += 1
 
-    # Combina con las filas que YA estaban rechazadas por auto_label_bboxes.py (sin tocar)
     still_rejected = review[review["accepted"] == False]
     final_review = pd.concat([pd.DataFrame(updated_rows), still_rejected], ignore_index=True)
     final_review.to_csv(review_path, index=False)

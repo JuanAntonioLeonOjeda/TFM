@@ -1,28 +1,13 @@
-"""
-check_dicom_metadata.py
-========================
-Muestra TODOS los metadatos disponibles en uno o varios archivos DICOM,
-para explorar qué información trae la cabecera.
+"""Imprime todos los metadatos DICOM de un archivo o de una muestra aleatoria.
 
-Uso:
-    # Ver los metadatos completos de una imagen concreta:
-    python check_dicom_metadata.py --path "res/dataset/.../lumos_x_69_1.Dcm"
-
-    # Ver los metadatos de una muestra aleatoria de N imágenes:
-    python check_dicom_metadata.py --sample 5
-
-    # Ver los metadatos del caso con altura anómala (5596), si lo tienes
-    # identificado en resolutions_full.csv:
-    python check_dicom_metadata.py --path "<ruta_del_csv>"
+Uso: python -m data.checks.check_dicom_metadata [--path x.Dcm | --sample 5]
 """
 
 import argparse
-from pathlib import Path
 
 import pydicom
-import pandas as pd
 
-from data.df_import import load_image_index  # AJUSTA al nombre real de tu módulo
+from data.df_import import load_image_index
 
 
 def show_metadata(path):
@@ -31,9 +16,8 @@ def show_metadata(path):
     print('='*70)
     ds = pydicom.dcmread(path)
 
-    # imprime TODOS los campos disponibles en la cabecera
     for elem in ds:
-        if elem.tag == (0x7FE0, 0x0010):   # PixelData, no lo imprimimos (es la imagen en sí)
+        if elem.tag == (0x7FE0, 0x0010):  # PixelData
             print(f"  {elem.name:35s}: [datos de píxeles, {len(elem.value)} bytes]")
             continue
         try:

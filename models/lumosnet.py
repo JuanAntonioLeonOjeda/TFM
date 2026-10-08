@@ -4,7 +4,6 @@ from torchvision.models import resnet50, ResNet50_Weights
 
 
 def get_device():
-    """Returns the best available device (MPS on Apple Silicon, else CUDA, else CPU)."""
     if torch.backends.mps.is_available():
         return torch.device("mps")
     if torch.cuda.is_available():
@@ -13,33 +12,22 @@ def get_device():
 
 
 class LumosNet(nn.Module):
+    """ResNet50 + capa compartida + dos cabezas: clasificación (3 clases) y regresión de BMD.
+
+    num_covariates > 0 añade una rama que embebe las covariables clínicas y las
+    concatena con las features de imagen antes de la capa compartida.
+    """
+
     def __init__(self, num_classes: int = 3, pretrained: bool = True, dropout: float = 0.3,
                  num_covariates: int = 0, covariate_embed_dim: int = 32, shared_dim: int = 512):
-        """
-        num_covariates: número de covariables clínicas a concatenar (p.ej. 3
-            para age/gender/BMI). 0 (default) desactiva esta rama por
-            completo -- el modelo se comporta como la versión original,
-            salvo por la capa compartida (ver más abajo), que SIEMPRE está
-            presente, con o sin covariables.
-        covariate_embed_dim: tamaño del embedding aprendido de las
-            covariables, antes de concatenarlas con las features de imagen.
-        shared_dim: tamaño de la capa compartida, colocada ANTES de
-            bifurcar en las dos cabezas (clasificación y regresión).
-        """
         super().__init__()
 
-        # ---- shared backbone ----
         weights = ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
         backbone = resnet50(weights=weights)
-
-        # number of features the backbone outputs before its classifier (2048 for ResNet50)
-        in_features = backbone.fc.in_features
-
-        # remove the original 1000-class classifier: keep everything up to the pooling
+        in_features = backbone.fc.in_features  # 2048
         backbone.fc = nn.Identity()
         self.backbone = backbone
 
-        # ---- covariables clínicas (opcional) ----
         self.num_covariates = num_covariates
         if num_covariates > 0:
             self.covariate_embed = nn.Sequential(
@@ -51,62 +39,37 @@ class LumosNet(nn.Module):
             self.covariate_embed = None
             combined_dim = in_features
 
-        # ---- capa compartida, ANTES de bifurcar en las dos cabezas ----
         self.shared = nn.Sequential(
             nn.Linear(combined_dim, shared_dim),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout),
         )
+        self.classifier = self._head(shared_dim, num_classes, dropout)
+        self.regressor = self._head(shared_dim, 1, dropout)
 
-        # ---- head 1: classification (3 classes) ----
-        self.classifier = nn.Sequential(
+    @staticmethod
+    def _head(in_dim: int, out_dim: int, dropout: float) -> nn.Sequential:
+        return nn.Sequential(
             nn.Dropout(dropout),
-            nn.Linear(shared_dim, 256),
+            nn.Linear(in_dim, 256),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout),
-            nn.Linear(256, num_classes),
-        )
-
-        # ---- head 2: regression (BMD) ----
-        self.regressor = nn.Sequential(
-            nn.Dropout(dropout),
-            nn.Linear(shared_dim, 256),
-            nn.ReLU(inplace=True),
-            nn.Dropout(dropout),
-            nn.Linear(256, 1),
+            nn.Linear(256, out_dim),
         )
 
     def forward(self, x, covariates: torch.Tensor | None = None):
-        features = self.backbone(x)          # (B, 2048)
+        features = self.backbone(x)
 
         if self.covariate_embed is not None:
             if covariates is None:
-                raise ValueError(
-                    "Este modelo se creó con num_covariates > 0, pero forward() "
-                    "no recibió covariates. Revisa que el DataLoader las esté "
-                    "devolviendo y que train.py/evaluate.py las estén pasando."
-                )
-            cov_emb = self.covariate_embed(covariates)          # (B, covariate_embed_dim)
-            features = torch.cat([features, cov_emb], dim=1)    # (B, 2048 + embed_dim)
+                raise ValueError("Modelo creado con num_covariates > 0: forward() necesita covariates.")
+            features = torch.cat([features, self.covariate_embed(covariates)], dim=1)
 
-        shared = self.shared(features)        # (B, shared_dim)
-
-        logits = self.classifier(shared)      # (B, num_classes)
-        bmd = self.regressor(shared)          # (B, 1)
-
-        return logits, bmd.squeeze(1)         # bmd -> (B,)
+        shared = self.shared(features)
+        return self.classifier(shared), self.regressor(shared).squeeze(1)
 
     def head_parameters(self):
-        """
-        Todos los parámetros que NO son del backbone: classifier, regressor,
-        la capa compartida y (si existe) el embedding de covariables.
-
-        Las estrategias de entrenamiento (training/strategies/) deben usar
-        esto en vez de enumerar `model.classifier.parameters() + ...` a
-        mano, para que un futuro cambio de arquitectura (nuevas capas entre
-        el backbone y las cabezas) no las deje fuera del optimizador de
-        forma silenciosa -- exactamente el bug que motivó este método.
-        """
+        """Todo lo que no es backbone. Las estrategias deben usar esto para no dejar capas fuera del optimizador."""
         params = list(self.classifier.parameters()) + \
                  list(self.regressor.parameters()) + \
                  list(self.shared.parameters())
@@ -118,22 +81,12 @@ class LumosNet(nn.Module):
 if __name__ == "__main__":
     device = get_device()
     print(f"Device: {device}")
-
-    print("\n--- Sin covariables (comportamiento equivalente al original + capa compartida) ---")
-    model = LumosNet(pretrained=True).to(device)
     dummy = torch.randn(4, 3, 224, 224, device=device)
-    logits, bmd = model(dummy)
-    print(f"Input : {tuple(dummy.shape)}")
-    print(f"Logits: {tuple(logits.shape)}   (expected (4, 3))")
-    print(f"BMD   : {tuple(bmd.shape)}      (expected (4,))")
-    n_params = sum(p.numel() for p in model.parameters())
-    print(f"Total parameters: {n_params:,}")
 
-    print("\n--- Con 3 covariables (age, gender, BMI) ---")
-    model_cov = LumosNet(pretrained=True, num_covariates=3).to(device)
-    dummy_cov = torch.randn(4, 3, device=device)
-    logits, bmd = model_cov(dummy, dummy_cov)
-    print(f"Logits: {tuple(logits.shape)}   (expected (4, 3))")
-    print(f"BMD   : {tuple(bmd.shape)}      (expected (4,))")
-    n_params_cov = sum(p.numel() for p in model_cov.parameters())
-    print(f"Total parameters: {n_params_cov:,}  (+{n_params_cov - n_params:,} vs sin covariables)")
+    for n_cov in (0, 3):
+        model = LumosNet(pretrained=True, num_covariates=n_cov).to(device)
+        cov = torch.randn(4, n_cov, device=device) if n_cov else None
+        logits, bmd = model(dummy, cov)
+        n_params = sum(p.numel() for p in model.parameters())
+        print(f"num_covariates={n_cov}: logits {tuple(logits.shape)}, bmd {tuple(bmd.shape)}, "
+              f"{n_params:,} params")
