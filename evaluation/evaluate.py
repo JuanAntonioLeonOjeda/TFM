@@ -45,6 +45,7 @@ DATASETS = {
     "roi":  {"img_file": "images_roi.npy", "meta_file": "metadata_roi.csv"},
     "roi_hybrid": {"img_file": "images_roi_hybrid.npy", "meta_file": "metadata_roi_hybrid.csv"},
     "hires": {"img_file": "images_320.npy", "meta_file": "metadata_320.csv"},
+    "roi_yolo": {"img_file": "images_roi_yolo.npy", "meta_file": "metadata_roi_yolo.csv"}
 }
 
 
