@@ -29,7 +29,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import classification_report, roc_auc_score
 from tqdm import tqdm
 
-from data.data_augmentation.lumos_dataset import LumosDataset
+from data.lumos_dataset import LumosDataset
 from torch.utils.data import DataLoader
 from models.lumosnet import LumosNet, get_device
 from training.strategies.phased import PhasedStrategy
