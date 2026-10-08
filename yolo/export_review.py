@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DATASET_DIR = Path(__file__).resolve().parent / "res" / "yolo_dataset"
+from data.df_import import YOLO_DATASET_DIR as DATASET_DIR
 REVIEW_DIR = DATASET_DIR / "review_session"
 
 

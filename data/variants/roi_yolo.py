@@ -33,9 +33,10 @@ import numpy as np
 import pandas as pd
 from ultralytics import YOLO
 
-PROC_DIR = Path(__file__).resolve().parent.parent / "res" / "processed"
+from data.df_import import PROC_DIR, PROJECT_ROOT
+
 DEFAULT_WEIGHTS = (
-    Path(__file__).resolve().parent.parent
+    PROJECT_ROOT
     / "runs" / "detect" / "res" / "yolo_dataset" / "lumbar_detector" / "weights" / "best.pt"
 )
 IMG_SIZE = 224

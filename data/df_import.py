@@ -9,6 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent   # tfm/
 DATA_DIR = PROJECT_ROOT / "res" / "dataset"
 EXCEL_PATH = DATA_DIR / "lumos_clinical_data.xlsx"
 PROC_DIR = PROJECT_ROOT / "res" / "processed"
+YOLO_DATASET_DIR = PROJECT_ROOT / "res" / "yolo_dataset"
 
 _PATTERN = re.compile(r"^lumos_x_(\d+)$")
 

@@ -46,10 +46,10 @@ from infer import (
     preprocess,
     resolve_dicom_path,
 )
+from data.df_import import YOLO_DATASET_DIR
 from evaluation.gradcam import compute_grayscale_cam
 
-ROOT = Path(__file__).resolve().parent
-OUTPUT_DIR = ROOT / "res" / "yolo_dataset"
+OUTPUT_DIR = YOLO_DATASET_DIR
 SEED = 42
 
 DEFAULT_THRESHOLD = 0.5       # umbral del mapa de calor para considerarlo "columna"

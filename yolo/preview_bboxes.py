@@ -23,7 +23,7 @@ import cv2
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
-YOLO_DATASET_DIR = Path(__file__).resolve().parent / "res" / "yolo_dataset"
+from data.df_import import YOLO_DATASET_DIR
 
 THUMB_SIZE = 220
 LABEL_HEIGHT = 20
