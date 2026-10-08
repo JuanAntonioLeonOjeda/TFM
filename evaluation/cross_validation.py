@@ -33,7 +33,7 @@ from data.lumos_dataset import LumosDataset
 from torch.utils.data import DataLoader
 from models.lumosnet import LumosNet, get_device
 from training.strategies.phased import PhasedStrategy
-from training.train import set_seed, compute_loss, train_one_epoch, evaluate as evaluate_epoch
+from training.train import set_seed, train_one_epoch, evaluate as evaluate_epoch
 
 ROOT = Path(__file__).resolve().parent.parent
 PROC_DIR = ROOT / "res" / "processed"
@@ -102,8 +102,8 @@ def main():
             if new_opt is not None:
                 optimizer = new_opt
 
-            train_loss = train_one_epoch(model, train_loader, optimizer, ce, mse, device)
-            val_loss, val_acc, val_rmse = evaluate_epoch(model, val_loader, ce, mse, device)
+            train_loss = train_one_epoch(model, train_loader, optimizer, ce, mse, device, use_covariates=False)
+            val_loss, val_acc, val_rmse = evaluate_epoch(model, val_loader, ce, mse, device, use_covariates=False)
 
             if val_loss < best_val:
                 best_val, best_epoch, no_improve = val_loss, epoch, 0

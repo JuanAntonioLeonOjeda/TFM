@@ -20,15 +20,13 @@ Run:
     python preprocess_roi.py
 """
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import cv2
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
-from data.df_import import load_lumos, read_image   # AJUSTA al nombre real de tu módulo
+from data.df_import import PROC_DIR, load_lumos, read_image   # AJUSTA al nombre real de tu módulo
 from data.roi_scripts.roi_crop import crop_roi
 
 # =====================================================================
@@ -43,8 +41,6 @@ VAL_FRACTION = 0.15
 TEST_FRACTION = 0.15
 SEED = 42
 
-ROOT = Path(__file__).resolve().parent
-PROC_DIR = ROOT / "res" / "processed"
 
 
 # =====================================================================

@@ -4,10 +4,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent   # sube de data/ a tfm/
-PROC = ROOT / "res" / "processed"
+from data.df_import import PROC_DIR as PROC
 
 images = np.load(PROC / "images.npy")
 meta = pd.read_csv(PROC / "metadata.csv")

@@ -1,16 +1,10 @@
-from pathlib import Path
 import sys
 
 import numpy as np
 import pandas as pd
 
-# project imports (adjust the module paths to your folder layout)
-from df_import import load_clinical, load_image_index
-from df_preprocess import main as run_preprocess
-
-ROOT = Path(__file__).resolve().parent.parent
-RAW_DIR = ROOT / "res" / "dataset"
-PROC_DIR = ROOT / "res" / "processed"
+from data.df_import import DATA_DIR as RAW_DIR, PROC_DIR, load_clinical, load_image_index
+from data.df_preprocess import main as run_preprocess
 
 
 def step(msg):

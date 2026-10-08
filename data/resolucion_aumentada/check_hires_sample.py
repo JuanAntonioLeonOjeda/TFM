@@ -12,16 +12,13 @@ Uso:
     python check_hires_sample.py
 """
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-ROOT = Path(__file__).resolve().parent
-PROC_DIR = ROOT / "res" / "processed"
+from data.df_import import PROJECT_ROOT as ROOT, PROC_DIR
 
 
 def compare_resolutions(n_samples=4, seed=42):

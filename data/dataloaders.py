@@ -18,16 +18,12 @@ NUEVO: soporte opcional para covariables clínicas (--covariate-cols), p.ej.
       datos (data leakage).
 """
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader
 
+from data.df_import import PROC_DIR
 from data.lumos_dataset import LumosDataset
-
-ROOT = Path(__file__).resolve().parent.parent
-PROC_DIR = ROOT / "res" / "processed"
 
 # Covariables clínicas fijas para los experimentos de este trabajo.
 # age, gender, BMI -- factores de riesgo clínicamente justificados (ver

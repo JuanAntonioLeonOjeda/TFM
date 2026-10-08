@@ -69,9 +69,9 @@ def main():
                      "series_description": desc, "view": classify_view(desc)})
 
     import pandas as pd
-    from pathlib import Path
+    from data.df_import import PROC_DIR
     out = pd.DataFrame(rows)
-    out_dir = Path(__file__).resolve().parent / "res" / "processed"
+    out_dir = PROC_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     out.to_csv(out_dir / "view_labels.csv", index=False)
     print(f"Guardado: {out_dir / 'view_labels.csv'}")

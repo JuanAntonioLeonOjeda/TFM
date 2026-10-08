@@ -6,11 +6,10 @@ paciente (la primera, si hubiera varias). Guarda el resultado en
 res/processed/ap_only.csv, listo para usarse en el preprocesamiento con ROI.
 """
 
-from pathlib import Path
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parent
-PROC_DIR = ROOT / "res" / "processed"
+from data.df_import import PROC_DIR
+
 
 
 def main():

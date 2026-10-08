@@ -9,18 +9,14 @@ Uso:
     python visualize_roi_grid.py
 """
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from data.df_import import read_image   # AJUSTA al nombre real de tu módulo
+from data.df_import import PROJECT_ROOT as ROOT, PROC_DIR, read_image   # AJUSTA al nombre real de tu módulo
 
-ROOT = Path(__file__).resolve().parent
-PROC_DIR = ROOT / "res" / "processed"
 
 # líneas verticales de referencia, como fracción del ancho de la imagen
 GRID_FRACTIONS = [0.30, 0.40, 0.50, 0.60, 0.70]
