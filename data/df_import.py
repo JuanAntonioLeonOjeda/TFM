@@ -5,9 +5,13 @@ import numpy as np
 import pandas as pd
 import pydicom
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent   # tfm/
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "res" / "dataset"
 EXCEL_PATH = DATA_DIR / "lumos_clinical_data.xlsx"
+PROC_DIR = PROJECT_ROOT / "res" / "processed"
+YOLO_DATASET_DIR = PROJECT_ROOT / "res" / "yolo_dataset"
+
+CLASS_NAMES = ["Sano", "Osteopenia", "Osteoporosis"]
 
 _PATTERN = re.compile(r"^lumos_x_(\d+)$")
 
@@ -56,6 +60,7 @@ def read_image(path, normalize: bool = True) -> np.ndarray:
     ds = pydicom.dcmread(path)
     img = ds.pixel_array.astype(np.float32)
 
+    # MONOCHROME1: valores altos = negro; se invierte para que el hueso sea claro
     if getattr(ds, "PhotometricInterpretation", "") == "MONOCHROME1":
         img = img.max() - img
 

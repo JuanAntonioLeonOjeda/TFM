@@ -1,16 +1,15 @@
-from pathlib import Path
+"""Comprueba los datos crudos, ejecuta df_preprocess y verifica la salida (incluida fuga entre splits).
+
+Uso: python -m data.prepare_data
+"""
+
 import sys
 
 import numpy as np
 import pandas as pd
 
-# project imports (adjust the module paths to your folder layout)
-from df_import import load_clinical, load_image_index
-from df_preprocess import main as run_preprocess
-
-ROOT = Path(__file__).resolve().parent.parent
-RAW_DIR = ROOT / "res" / "dataset"
-PROC_DIR = ROOT / "res" / "processed"
+from data.df_import import DATA_DIR, PROC_DIR, load_clinical, load_image_index
+from data.df_preprocess import main as run_preprocess
 
 
 def step(msg):
@@ -19,35 +18,25 @@ def step(msg):
     print("=" * 62)
 
 
-# ---------------------------------------------------------------------
-# 1. CHECK RAW DATA
-# ---------------------------------------------------------------------
 def check_raw():
     step("1. CHECKING RAW DATA")
 
-    if not RAW_DIR.exists():
-        sys.exit(f"ERROR: raw dataset folder not found: {RAW_DIR}")
+    if not DATA_DIR.exists():
+        sys.exit(f"ERROR: raw dataset folder not found: {DATA_DIR}")
 
-    # clinical excel
     try:
         clinical = load_clinical()
         print(f"Clinical rows: {len(clinical)}  (expected 803)")
     except Exception as e:
         sys.exit(f"ERROR reading clinical Excel: {e}")
 
-    # image folders
     images = load_image_index()
     if images.empty:
         sys.exit("ERROR: no DICOM images found. Check the folders are unzipped.")
     print(f"Images found : {len(images)}  (expected ~1620)")
     print(f"Patients     : {images['patient_id'].nunique()}")
 
-    return True
 
-
-# ---------------------------------------------------------------------
-# 2. RUN PREPROCESSING
-# ---------------------------------------------------------------------
 def run():
     step("2. PREPROCESSING (DICOM -> npy)")
 
@@ -59,15 +48,11 @@ def run():
     run_preprocess()
 
 
-# ---------------------------------------------------------------------
-# 3. VERIFY OUTPUT
-# ---------------------------------------------------------------------
 def verify():
     step("3. VERIFYING OUTPUT")
 
     img_path = PROC_DIR / "images.npy"
     meta_path = PROC_DIR / "metadata.csv"
-
     if not img_path.exists() or not meta_path.exists():
         sys.exit("ERROR: processed files were not created.")
 
@@ -82,13 +67,10 @@ def verify():
 
     print("\nSplit distribution:")
     print(meta["split"].value_counts().to_string())
-
     print("\nClass per split:")
     print(pd.crosstab(meta["split"], meta["label"]).to_string())
 
-    # leakage check: no patient in more than one split
-    per_patient_splits = meta.groupby("patient_id")["split"].nunique()
-    leaks = (per_patient_splits > 1).sum()
+    leaks = (meta.groupby("patient_id")["split"].nunique() > 1).sum()
     if leaks:
         print(f"\nWARNING: {leaks} patients appear in more than one split (data leakage!)")
     else:
@@ -99,5 +81,4 @@ if __name__ == "__main__":
     check_raw()
     run()
     verify()
-
     step("Dataset ready for training")

@@ -1,29 +1,10 @@
-"""
-evaluate.py
-===========
-Evaluates a trained LumosNet on the TEST set, aggregating predictions
-PER PATIENT (images of each patient combined by averaging softmax
-probabilities; BMD is the average of their predicted values).
+"""Evalúa un checkpoint en test, agregando por paciente (media de probabilidades y de BMD).
 
-Supports both the full dataset and the AP+ROI dataset via --data, the
-class-weighting scheme used at training time via --class-weighting, and
-the medical covariates via --covariates. Both flags must match what you
-passed to train.py, so the checkpoint filename and model architecture
-resolve correctly.
-
-Run:
-    python -m evaluation.evaluate --strategy differential --data full
-    python -m evaluation.evaluate --strategy phased        --data roi
-    python -m evaluation.evaluate --strategy phased        --data full --class-weighting inverse
-    python -m evaluation.evaluate --strategy phased        --data full --covariates
-
-Outputs (in outputs/):
-    confusion_<strategy>_<data>[_cw<scheme>][_covars].png
-    bmd_scatter_<strategy>_<data>[_cw<scheme>][_covars].png
+Uso: python -m evaluation.evaluate --strategy phased --data full [--class-weighting inverse] [--covariates]
+     (los flags deben coincidir con los usados en training.train)
 """
 
 import argparse
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -33,59 +14,34 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report, roc_auc_score
 
-from data.dataloaders import make_dataloaders, PROC_DIR, MEDICAL_COVARIATES
+from data.dataloaders import DATASETS, MEDICAL_COVARIATES, make_dataloaders
+from data.df_import import CLASS_NAMES
 from models.lumosnet import LumosNet, get_device
+from training.train import OUT_DIR, add_experiment_args, run_tag
 
-ROOT = Path(__file__).resolve().parent.parent
-OUT_DIR = ROOT / "outputs"
-CLASS_NAMES = ["Sano", "Osteopenia", "Osteoporosis"]
-
-DATASETS = {
-    "full": {"img_file": "images.npy", "meta_file": "metadata.csv"},
-    "roi":  {"img_file": "images_roi.npy", "meta_file": "metadata_roi.csv"},
-    "roi_hybrid": {"img_file": "images_roi_hybrid.npy", "meta_file": "metadata_roi_hybrid.csv"},
-    "hires": {"img_file": "images_320.npy", "meta_file": "metadata_320.csv"},
-    "roi_yolo": {"img_file": "images_roi_yolo.npy", "meta_file": "metadata_roi_yolo.csv"}
-}
+PROB_COLS = ["p0", "p1", "p2"]
 
 
-# =====================================================================
-# INFERENCE ON TEST (per image)
-# =====================================================================
 @torch.no_grad()
 def predict_test(model, loader, device, use_covariates: bool):
     model.eval()
     all_probs, all_bmd = [], []
     for batch in loader:
-        if use_covariates:
-            images, _, _, covariates = batch
-            covariates = covariates.to(device)
-        else:
-            images = batch[0]
-            covariates = None
-
-        images = images.to(device)
+        images = batch[0].to(device)
+        covariates = batch[3].to(device) if use_covariates else None
         logits, bmd_pred = model(images, covariates)
-        probs = torch.softmax(logits, dim=1)
-        all_probs.append(probs.cpu().numpy())
+        all_probs.append(torch.softmax(logits, dim=1).cpu().numpy())
         all_bmd.append(bmd_pred.cpu().numpy())
     return np.concatenate(all_probs), np.concatenate(all_bmd)
 
 
-# =====================================================================
-# PER-PATIENT AGGREGATION
-# =====================================================================
-def aggregate_by_patient(probs, bmd_pred, meta_file):
-    meta = pd.read_csv(PROC_DIR / meta_file)
-    test = meta[meta["split"] == "test"].reset_index(drop=True)
-
-    assert len(test) == len(probs), (
-        f"Misaligned: {len(test)} test rows vs {len(probs)} predictions. "
-        "Make sure the test loader is not shuffled."
+def aggregate_by_patient(test_meta: pd.DataFrame, probs, bmd_pred) -> pd.DataFrame:
+    """test_meta debe estar en el mismo orden que las predicciones (loader sin shuffle)."""
+    assert len(test_meta) == len(probs), (
+        f"Misaligned: {len(test_meta)} test rows vs {len(probs)} predictions."
     )
-
-    df = test[["patient_id", "label", "bmd"]].copy()
-    df[["p0", "p1", "p2"]] = probs
+    df = test_meta[["patient_id", "label", "bmd"]].copy()
+    df[PROB_COLS] = probs
     df["bmd_pred"] = bmd_pred
 
     agg = df.groupby("patient_id").agg(
@@ -94,18 +50,13 @@ def aggregate_by_patient(probs, bmd_pred, meta_file):
         p0=("p0", "mean"), p1=("p1", "mean"), p2=("p2", "mean"),
         bmd_pred=("bmd_pred", "mean"),
     ).reset_index()
-
-    agg["pred"] = agg[["p0", "p1", "p2"]].values.argmax(axis=1)
+    agg["pred"] = agg[PROB_COLS].values.argmax(axis=1)
     return agg
 
 
-# =====================================================================
-# METRICS
-# =====================================================================
 def classification_metrics(agg):
     y_true = agg["label"].values
     y_pred = agg["pred"].values
-    probs = agg[["p0", "p1", "p2"]].values
 
     print("\n--- CLASSIFICATION (per patient) ---")
     print(classification_report(y_true, y_pred, target_names=CLASS_NAMES, digits=3))
@@ -124,7 +75,7 @@ def classification_metrics(agg):
         print(f"  {name:13s}: sens {sens:.3f} | spec {spec:.3f}")
 
     try:
-        auc = roc_auc_score(y_true, probs, multi_class="ovr")
+        auc = roc_auc_score(y_true, agg[PROB_COLS].values, multi_class="ovr")
         print(f"\nAUC (macro, one-vs-rest): {auc:.3f}")
     except ValueError as e:
         print(f"\nAUC not computed: {e}")
@@ -147,9 +98,6 @@ def regression_metrics(agg):
     return rmse, mae, pcc
 
 
-# =====================================================================
-# PLOTS
-# =====================================================================
 def plot_confusion(cm, tag):
     fig, ax = plt.subplots(figsize=(5.5, 5))
     im = ax.imshow(cm, cmap="Blues")
@@ -180,40 +128,26 @@ def plot_bmd_scatter(agg, tag):
     print(f"Saved: {path}")
 
 
-# =====================================================================
-# MAIN
-# =====================================================================
 def evaluate(strategy: str, data_name: str, class_weighting: str = "none",
              use_covariates: bool = False):
     OUT_DIR.mkdir(exist_ok=True)
     device = get_device()
 
-    files = DATASETS[data_name]
-    tag = f"{strategy}_{data_name}"
-    if class_weighting != "none":
-        tag += f"_cw{class_weighting}"
-    if use_covariates:
-        tag += "_covars"
-
+    tag = run_tag(strategy, data_name, class_weighting, use_covariates)
     ckpt = OUT_DIR / f"best_{tag}.pt"
     if not ckpt.exists():
-        train_cmd = f"python -m training.train --strategy {strategy} --data {data_name}"
-        if class_weighting != "none":
-            train_cmd += f" --class-weighting {class_weighting}"
-        if use_covariates:
-            train_cmd += " --covariates"
-        raise FileNotFoundError(f"No trained model found: {ckpt}. Entrena primero con: {train_cmd}")
+        raise FileNotFoundError(f"No trained model found: {ckpt}. Entrena primero con training.train "
+                                f"usando los mismos flags.")
 
     covariate_cols = MEDICAL_COVARIATES if use_covariates else None
-    loaders = make_dataloaders(batch_size=32, covariate_cols=covariate_cols, **files)
+    loaders = make_dataloaders(batch_size=32, covariate_cols=covariate_cols, **DATASETS[data_name])
 
-    num_covariates = len(MEDICAL_COVARIATES) if use_covariates else 0
-    model = LumosNet(pretrained=False, num_covariates=num_covariates).to(device)
+    model = LumosNet(pretrained=False, num_covariates=len(covariate_cols or [])).to(device)
     model.load_state_dict(torch.load(ckpt, map_location=device))
     print(f"Loaded {ckpt} | Device: {device}")
 
     probs, bmd_pred = predict_test(model, loaders["test"], device, use_covariates)
-    agg = aggregate_by_patient(probs, bmd_pred, files["meta_file"])
+    agg = aggregate_by_patient(loaders["test"].dataset.meta, probs, bmd_pred)
     print(f"\nTest patients: {len(agg)}  (aggregated from {len(probs)} images)")
 
     cm = classification_metrics(agg)
@@ -225,12 +159,6 @@ def evaluate(strategy: str, data_name: str, class_weighting: str = "none",
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--strategy", choices=["differential", "phased"], default="phased")
-    parser.add_argument("--data", choices=list(DATASETS.keys()), default="full")
-    parser.add_argument("--class-weighting", choices=["none", "inverse", "effective"],
-                         default="none",
-                         help="Debe coincidir con el usado al entrenar")
-    parser.add_argument("--covariates", action="store_true",
-                         help="Debe coincidir con el usado al entrenar")
+    add_experiment_args(parser)
     args = parser.parse_args()
     evaluate(args.strategy, args.data, args.class_weighting, args.covariates)
