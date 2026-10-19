@@ -19,6 +19,11 @@ __pycache__/
 *.ckpt
 outputs/
 checkpoints/
+runs/
+
+# Salidas generadas por scripts
+heatmaps/
+resolutions_full.csv
 
 # Figuras generadas
 *.png

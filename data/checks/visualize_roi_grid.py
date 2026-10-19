@@ -1,15 +1,9 @@
-"""
-visualize_roi_grid.py
-======================
-Muestra una muestra de radiografías AP (en su resolución ORIGINAL, antes del
-resize a 224) con una rejilla vertical superpuesta, para decidir a ojo dónde
-recortar la columna vertebral (ROI heurístico).
+"""Radiografías AP en resolución original con líneas verticales, para elegir el recorte ROI.
 
-Uso:
-    python visualize_roi_grid.py
+Uso: python -m data.checks.visualize_roi_grid
 """
 
-from pathlib import Path
+import subprocess
 
 import numpy as np
 import pandas as pd
@@ -17,12 +11,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from data.df_import import read_image   # AJUSTA al nombre real de tu módulo
+from data.df_import import PROJECT_ROOT as ROOT, PROC_DIR, read_image
 
-ROOT = Path(__file__).resolve().parent
-PROC_DIR = ROOT / "res" / "processed"
-
-# líneas verticales de referencia, como fracción del ancho de la imagen
+# fracción del ancho
 GRID_FRACTIONS = [0.30, 0.40, 0.50, 0.60, 0.70]
 N_SAMPLES = 9
 SEED = 20
@@ -39,7 +30,7 @@ def main():
     axes = np.atleast_1d(axes).flatten()
 
     for ax, (_, row) in zip(axes, sample.iterrows()):
-        img = read_image(row["image_path"])   # array (H, W), float [0,1]
+        img = read_image(row["image_path"])
         h, w = img.shape
 
         ax.imshow(img, cmap="gray")
@@ -60,7 +51,6 @@ def main():
     plt.savefig(out_path, dpi=110, bbox_inches="tight")
     print(f"Guardado: {out_path}")
 
-    import subprocess
     subprocess.run(["open", str(out_path)])
 
 

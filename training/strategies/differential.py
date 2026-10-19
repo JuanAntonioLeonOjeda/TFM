@@ -9,6 +9,5 @@ class DifferentialStrategy(Strategy):
     def build_optimizer(self, model):
         return torch.optim.Adam([
             {"params": model.backbone.parameters(), "lr": self.lr_backbone},
-            {"params": model.classifier.parameters(), "lr": self.lr_head},
-            {"params": model.regressor.parameters(), "lr": self.lr_head},
+            {"params": model.head_parameters(), "lr": self.lr_head},
         ])
