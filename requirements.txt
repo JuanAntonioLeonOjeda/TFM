@@ -36,3 +36,5 @@ ultralytics==8.4.161
 fastapi
 uvicorn[standard]
 python-multipart
+httpx
+pytest
