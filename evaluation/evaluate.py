@@ -1,9 +1,3 @@
-"""Evalúa un checkpoint en test, agregando por paciente (media de probabilidades y de BMD).
-
-Uso: python -m evaluation.evaluate --strategy phased --data full [--class-weighting inverse] [--covariates]
-     (los flags deben coincidir con los usados en training.train)
-"""
-
 import argparse
 
 import numpy as np
@@ -35,8 +29,8 @@ def predict_test(model, loader, device, use_covariates: bool):
     return np.concatenate(all_probs), np.concatenate(all_bmd)
 
 
+# test_meta debe estar en el mismo orden que las predicciones, es decir, con el loader sin shuffle
 def aggregate_by_patient(test_meta: pd.DataFrame, probs, bmd_pred) -> pd.DataFrame:
-    """test_meta debe estar en el mismo orden que las predicciones (loader sin shuffle)."""
     assert len(test_meta) == len(probs), (
         f"Misaligned: {len(test_meta)} test rows vs {len(probs)} predictions."
     )

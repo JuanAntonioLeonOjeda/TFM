@@ -1,9 +1,3 @@
-"""Variante ROI YOLO: recorte adaptativo de la vista AP con el detector entrenado (yolo/).
-
-Si la confianza es baja o no hay detección, se mantiene la imagen completa.
-Uso: python -m data.variants.roi_yolo [--weights best.pt] [--conf 0.5]
-"""
-
 import argparse
 import re
 from pathlib import Path
@@ -20,13 +14,14 @@ DEFAULT_WEIGHTS = (
 )
 IMG_SIZE = 224
 DEFAULT_CONF_THRESHOLD = 0.5
-MARGIN_FRAC = 0.08  # mismo margen que yolo/auto_label.py
+MARGIN_FRAC = 0.08  # mismo margen que en yolo/auto_label.py
 
 _VIEW_PATTERN = re.compile(r"_(\d+)\.[Dd][Cc][Mm]$")
 
 
+# Extrae el número de vista del nombre del archivo (lumos_x_001_1.Dcm es la vista 1)
+# y devuelve -1 si no se puede determinar
 def extract_view(image_path: str) -> int:
-    """'.../lumos_x_001_1.Dcm' -> 1; -1 si no se puede determinar."""
     m = _VIEW_PATTERN.search(image_path)
     return int(m.group(1)) if m else -1
 

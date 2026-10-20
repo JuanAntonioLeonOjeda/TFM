@@ -1,5 +1,3 @@
-"""Grad-CAM / HiResCAM para LumosNet (pip install grad-cam)."""
-
 import torch
 import torch.nn as nn
 from pytorch_grad_cam import GradCAM, HiResCAM
@@ -7,8 +5,8 @@ from pytorch_grad_cam.utils.image import show_cam_on_image
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
 
-# pytorch-grad-cam llama a model(x) con un solo tensor de salida y un solo argumento.
-# Estos wrappers exponen una de las dos cabezas y llevan las covariables fijadas.
+# pytorch-grad-cam llama al modelo con un único argumento y espera una única salida.
+# Estos wrappers exponen una de las dos cabezas y llevan fijadas las covariables
 class _ClassificationOutputWrapper(nn.Module):
     def __init__(self, model, covariates: torch.Tensor | None = None):
         super().__init__()
@@ -36,12 +34,14 @@ class _RegressionTarget:
         return model_output[0] if model_output.dim() > 0 else model_output
 
 
+# Se usa el último bloque residual completo de ResNet50, no una convolución aislada
 def get_target_layer(model):
-    """Último bloque residual completo de ResNet50, no una convolución aislada."""
     base = getattr(model, "model", model)
     return base.backbone.layer4[-1]
 
 
+# Calcula el mapa de calor en bruto, del tamaño de la imagen y con valores entre 0 y 1.
+# Devuelve el mapa y la clase explicada, o None si el objetivo es la BMD
 def compute_grayscale_cam(
     model,
     image_tensor: torch.Tensor,
@@ -50,7 +50,6 @@ def compute_grayscale_cam(
     use_hires: bool = True,
     covariates: torch.Tensor | None = None,
 ):
-    """Mapa de calor crudo HxW en [0,1]. Devuelve (cam, class_idx usado o None si target='bmd')."""
     device = next(model.parameters()).device
     image_tensor = image_tensor.to(device)
     if covariates is not None:
@@ -81,6 +80,8 @@ def compute_grayscale_cam(
     return grayscale_cam, used_class_idx
 
 
+# Superpone el mapa de calor sobre la imagen base en RGB con valores entre 0 y 1.
+# Devuelve la imagen resultante en uint8 y la clase explicada
 def generate_heatmap(
     model,
     image_tensor: torch.Tensor,
@@ -90,7 +91,6 @@ def generate_heatmap(
     use_hires: bool = True,
     covariates: torch.Tensor | None = None,
 ):
-    """Overlay RGB uint8 del mapa sobre base_img_rgb_float01 (HxWx3 en [0,1]). Devuelve (overlay, class_idx)."""
     grayscale_cam, used_class_idx = compute_grayscale_cam(
         model, image_tensor, target=target, class_idx=class_idx,
         use_hires=use_hires, covariates=covariates,

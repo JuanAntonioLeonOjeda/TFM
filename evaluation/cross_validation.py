@@ -1,10 +1,3 @@
-"""K-fold (k=5) sobre train+val de la mejor configuración (phased, full), con el test fijo.
-
-El test es el mismo 15% de todos los experimentos, para que el resultado sea comparable.
-Uso: python -m evaluation.cross_validation
-Salida: outputs/cv_results.csv y outputs/cv_summary.txt
-"""
-
 import numpy as np
 import pandas as pd
 import torch
@@ -25,8 +18,9 @@ from training.train import (
 N_FOLDS = 5
 
 
+# Entrena un fold con early stopping y devuelve el modelo con los mejores pesos,
+# la mejor época y la mejor pérdida de validación
 def train_fold(train_ds, val_ds, device):
-    """Entrena un fold con early stopping y devuelve (modelo con los mejores pesos, best_epoch, best_val)."""
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
 

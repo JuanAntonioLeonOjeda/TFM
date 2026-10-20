@@ -1,9 +1,3 @@
-"""Entrenamiento multitarea de LumosNet (clasificación + regresión de BMD).
-
-Uso: python -m training.train --strategy phased --data full [--class-weighting inverse] [--covariates]
-Salida: outputs/best_<tag>.pt y outputs/history_<tag>.png
-"""
-
 import argparse
 import random
 
@@ -37,9 +31,9 @@ STRATEGIES = {
 CLASS_WEIGHTING = ["none", "inverse", "effective"]
 
 
+# Nombre del experimento, usado en los checkpoints y en las figuras
 def run_tag(strategy: str, data_name: str, class_weighting: str = "none",
             use_covariates: bool = False) -> str:
-    """Nombre del experimento, usado en checkpoints y figuras."""
     tag = f"{strategy}_{data_name}"
     if class_weighting != "none":
         tag += f"_cw{class_weighting}"
@@ -77,8 +71,8 @@ def compute_loss(logits, bmd_pred, labels, bmd_true, ce, mse):
     return ce(logits, labels) + BMD_WEIGHT * mse(bmd_pred, bmd_true)
 
 
+# El batch tiene imagen, etiqueta y BMD, y además las covariables si se usan
 def unpack_batch(batch, use_covariates: bool, device):
-    """Batch de 3 elementos (image, label, bmd) o 4 (+ covariates)."""
     images, labels, bmd = (t.to(device) for t in batch[:3])
     covariates = batch[3].to(device) if use_covariates else None
     return images, labels, bmd, covariates
@@ -100,9 +94,9 @@ def train_one_epoch(model, loader, optimizer, ce, mse, device, use_covariates: b
     return running / len(loader.dataset)
 
 
+# Devuelve la pérdida, la exactitud y el RMSE calculados por imagen
 @torch.no_grad()
 def evaluate(model, loader, ce, mse, device, use_covariates: bool):
-    """Devuelve (loss, accuracy, rmse) por imagen."""
     model.eval()
     running, correct, sq_err, n = 0.0, 0, 0.0, 0
     for batch in loader:
@@ -213,8 +207,8 @@ def plot_history(history, tag, best_epoch):
     print(f"Saved: {path}")
 
 
+# Argumentos que identifican un experimento, compartidos por train y evaluate
 def add_experiment_args(parser: argparse.ArgumentParser):
-    """Argumentos que identifican un experimento; compartidos por train y evaluate."""
     parser.add_argument("--strategy", choices=list(STRATEGIES), default="phased")
     parser.add_argument("--data", choices=list(DATASETS), default="full")
     parser.add_argument("--class-weighting", choices=CLASS_WEIGHTING, default="none")

@@ -1,8 +1,3 @@
-"""Muestra todas las radiografías de un paciente con su SeriesDescription y dimensiones.
-
-Uso: python -m data.checks.show_patient --patient 1 [--raw]
-"""
-
 import argparse
 import subprocess
 from pathlib import Path

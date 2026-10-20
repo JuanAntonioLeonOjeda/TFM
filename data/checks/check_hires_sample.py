@@ -1,8 +1,3 @@
-"""Compara visualmente images.npy (224) con images_320.npy.
-
-Uso: python -m data.checks.check_hires_sample
-"""
-
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -19,7 +14,7 @@ def compare_resolutions(n_samples=4, seed=42):
     images_320 = np.load(PROC_DIR / "images_320.npy")
     meta_320 = pd.read_csv(PROC_DIR / "metadata_320.csv")
 
-    # se empareja por patient_id: el orden puede no coincidir entre los dos npy
+    # Se empareja por patient_id porque el orden puede no coincidir entre los dos archivos npy
     common_patients = sorted(
         set(meta_224["patient_id"]) & set(meta_320["patient_id"])
     )

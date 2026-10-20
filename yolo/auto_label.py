@@ -1,9 +1,3 @@
-"""Cajas YOLO de la columna (vista AP) a partir del Grad-CAM: mayor componente sobre el umbral.
-
-Uso: python -m yolo.auto_label [--patients 1-50] [--threshold 0.6] [--margin 0.1]
-Salida: res/yolo_dataset/ (images, labels, dataset.yaml, review.csv con los rechazos)
-"""
-
 import argparse
 import random
 import re
@@ -34,9 +28,9 @@ DEFAULT_THRESHOLD = 0.5
 DEFAULT_MARGIN_FRAC = 0.08
 MIN_AREA_FRAC = 0.03
 MAX_AREA_FRAC = 0.75
-X_CENTER_MIN = 0.30           # franja central, coherente con el ROI fijo (25-75%)
+X_CENTER_MIN = 0.30           # franja central, coherente con el ROI fijo del 25 al 75 % del ancho
 X_CENTER_MAX = 0.70
-MIN_ASPECT_RATIO = 1.0        # alto/ancho: la columna es vertical
+MIN_ASPECT_RATIO = 1.0        # relación entre alto y ancho; la columna es vertical
 VAL_SPLIT = 0.15
 
 
@@ -45,8 +39,9 @@ def find_all_patients(dataset_root: Path = DATASET_ROOT) -> list[str]:
     return sorted(ids, key=lambda pid: int(pid.rsplit("_", 1)[1]))
 
 
+# Caja de la mayor componente conexa con margen y fracción de área que ocupa,
+# o None si no hay ninguna por encima del umbral
 def extract_bbox_from_cam(grayscale_cam: np.ndarray, threshold: float, margin_frac: float):
-    """(x0, y0, x1, y1, area_frac) de la mayor componente conexa con margen, o None."""
     h, w = grayscale_cam.shape
     mask = (grayscale_cam >= threshold).astype(np.uint8)
 
@@ -54,7 +49,7 @@ def extract_bbox_from_cam(grayscale_cam: np.ndarray, threshold: float, margin_fr
     if num_labels <= 1:
         return None
 
-    largest_idx = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))  # 0 es el fondo
+    largest_idx = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))  # la etiqueta 0 es el fondo
     x, y, bw, bh, _ = stats[largest_idx]
 
     mx, my = int(bw * margin_frac), int(bh * margin_frac)
@@ -65,8 +60,8 @@ def extract_bbox_from_cam(grayscale_cam: np.ndarray, threshold: float, margin_fr
     return x0, y0, x1, y1, area_frac
 
 
+# Devuelve el motivo de rechazo, o una cadena vacía si la caja es plausible
 def check_bbox(x0, y0, x1, y1, area_frac, w) -> str:
-    """Motivo de rechazo, o '' si la caja es plausible."""
     if not (MIN_AREA_FRAC <= area_frac <= MAX_AREA_FRAC):
         return f"área fuera de rango ({area_frac:.3f}, esperado {MIN_AREA_FRAC}-{MAX_AREA_FRAC})"
     x_center_frac = (x0 + x1) / 2 / w
@@ -117,7 +112,7 @@ def main():
 
     for patient in patients:
         try:
-            dicom_path = resolve_dicom_path(patient, view=1)  # view=1 se asume AP
+            dicom_path = resolve_dicom_path(patient, view=1)  # se asume que la primera vista es la AP
         except (FileNotFoundError, ValueError) as e:
             reject(patient, f"sin vista AP: {e}")
             continue

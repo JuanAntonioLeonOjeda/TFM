@@ -1,8 +1,3 @@
-"""Dimensiones reales (ancho, alto) de todas las radiografías -> resolutions_full.csv.
-
-Uso: python -m data.checks.check_resolutions
-"""
-
 import pydicom
 import numpy as np
 import pandas as pd
