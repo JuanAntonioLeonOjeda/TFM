@@ -3,6 +3,23 @@
 LumosNet (ResNet50) multitarea: clasificación Sano / Osteopenia / Osteoporosis + regresión de BMD.
 Todos los comandos se lanzan desde la raíz del repo.
 
+## MAIN DEPENDENCIES
+![Python](https://img.shields.io/badge/PYTHON-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PYTORCH-2.13.0-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
+![Torchvision](https://img.shields.io/badge/TORCHVISION-0.28.0-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
+![NumPy](https://img.shields.io/badge/NUMPY-2.5.1-013243?style=for-the-badge&logo=numpy&logoColor=white)
+![Pandas](https://img.shields.io/badge/PANDAS-3.0.5-150458?style=for-the-badge&logo=pandas&logoColor=white)
+![Scikit-learn](https://img.shields.io/badge/SCIKIT--LEARN-1.9.0-F7931E?style=for-the-badge&logo=scikitlearn&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OPENCV-5.0.0.93-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)
+![Pydicom](https://img.shields.io/badge/PYDICOM-3.0.2-blue?style=for-the-badge&logo=python&logoColor=white)
+![Matplotlib](https://img.shields.io/badge/MATPLOTLIB-3.11.1-11557c?style=for-the-badge&logo=python&logoColor=white)
+![Grad-CAM](https://img.shields.io/badge/GRAD--CAM-1.5.7-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
+![Ultralytics](https://img.shields.io/badge/ULTRALYTICS-8.4.161-111F68?style=for-the-badge&logo=yolo&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FASTAPI-0.151.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![Uvicorn](https://img.shields.io/badge/UVICORN-0.54.0-499848?style=for-the-badge&logo=gunicorn&logoColor=white)
+![Docker](https://img.shields.io/badge/DOCKER-29.8.2-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Pytest](https://img.shields.io/badge/PYTEST-9.1.1-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)
+
 ## Estructura
 
 ```
