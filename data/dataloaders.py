@@ -5,8 +5,8 @@ from torch.utils.data import DataLoader
 from data.df_import import PROC_DIR
 from data.lumos_dataset import LumosDataset
 
-# Se excluyen ethnicity (sin varianza) y las columnas de la DXA (bmd_*, T_*, Z_*...):
-# son la propia medición que define la etiqueta -> fuga de datos.
+# Se excluyen ethnicity, que no tiene varianza, y las columnas de la DXA (bmd, T y Z),
+# porque son la propia medición que define la etiqueta y provocarían fuga de datos
 MEDICAL_COVARIATES = ["age", "gender", "BMI"]
 
 # Variantes de dataset generadas por data/df_preprocess.py y data/variants/
@@ -19,8 +19,9 @@ DATASETS = {
 }
 
 
+# Convierte las columnas de texto en enteros por orden alfabético. Se hace sobre todo el dataset
+# porque es solo una codificación y no filtra información
 def _encode_categorical_columns(meta: pd.DataFrame, covariate_cols: list[str]) -> pd.DataFrame:
-    """Texto -> entero (orden alfabético). Se hace sobre todo el dataset: es solo una etiqueta, no filtra información."""
     meta = meta.copy()
     for col in covariate_cols:
         if not pd.api.types.is_numeric_dtype(meta[col]):

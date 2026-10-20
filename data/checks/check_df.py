@@ -1,8 +1,3 @@
-"""Sanity check del entorno, del dataset crudo y de unas imágenes de muestra.
-
-Uso: python -m data.checks.check_df
-"""
-
 import sys
 
 import numpy as np

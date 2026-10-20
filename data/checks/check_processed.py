@@ -1,8 +1,3 @@
-"""Muestra 6 imágenes de images.npy con su etiqueta.
-
-Uso: python -m data.checks.check_processed
-"""
-
 import subprocess
 
 import numpy as np

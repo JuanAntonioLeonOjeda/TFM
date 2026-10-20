@@ -1,27 +1,27 @@
-"""Entrenamiento multitarea de LumosNet (clasificación + regresión de BMD).
-
-Uso: python -m training.train --strategy phased --data full [--class-weighting inverse] [--covariates]
-Salida: outputs/best_<tag>.pt y outputs/history_<tag>.png
-"""
-
 import argparse
+import json
+import os
 import random
+from pathlib import Path
 
 import torch
 import torch.nn as nn
 import numpy as np
+import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from data.dataloaders import DATASETS, MEDICAL_COVARIATES, make_dataloaders
+from data.dataloaders import DATASETS, MEDICAL_COVARIATES, load_meta, make_dataloaders
 from data.df_import import PROJECT_ROOT
+from data.lumos_dataset import compute_covariate_stats
 from models.lumosnet import LumosNet, get_device
 from training.strategies.differential import DifferentialStrategy
 from training.strategies.phased import PhasedStrategy
 
-OUT_DIR = PROJECT_ROOT / "outputs"
+# Carpeta de checkpoints y figuras. La API la lee de MODEL_DIR para poder montarla como volumen
+OUT_DIR = Path(os.environ.get("MODEL_DIR", PROJECT_ROOT / "outputs"))
 
 EPOCHS = 50
 BATCH_SIZE = 32
@@ -37,15 +37,40 @@ STRATEGIES = {
 CLASS_WEIGHTING = ["none", "inverse", "effective"]
 
 
+# Nombre del experimento, usado en los checkpoints y en las figuras
 def run_tag(strategy: str, data_name: str, class_weighting: str = "none",
             use_covariates: bool = False) -> str:
-    """Nombre del experimento, usado en checkpoints y figuras."""
     tag = f"{strategy}_{data_name}"
     if class_weighting != "none":
         tag += f"_cw{class_weighting}"
     if use_covariates:
         tag += "_covars"
     return tag
+
+
+def covariate_stats_path(tag: str):
+    return OUT_DIR / f"best_{tag}_covariates.json"
+
+
+# Guarda junto al checkpoint la media y la desviación de train de cada covariable, y la codificación
+# de las columnas de texto, para poder normalizar pacientes nuevos sin necesidad del dataset
+def save_covariate_stats(data_name: str, tag: str):
+    meta_file = DATASETS[data_name]["meta_file"]
+    raw = load_meta(meta_file)
+    meta = load_meta(meta_file, MEDICAL_COVARIATES)
+    stats = compute_covariate_stats(meta[meta["split"] == "train"], MEDICAL_COVARIATES)
+    codes = {col: {str(v).lower(): i for i, v in enumerate(sorted(raw[col].dropna().unique()))}
+             for col in MEDICAL_COVARIATES if not pd.api.types.is_numeric_dtype(raw[col])}
+    spec = {
+        "covariates": MEDICAL_COVARIATES,
+        "mean": {c: float(stats[c][0]) for c in MEDICAL_COVARIATES},
+        "std": {c: float(stats[c][1]) for c in MEDICAL_COVARIATES},
+        "codes": codes,
+    }
+    OUT_DIR.mkdir(exist_ok=True)
+    path = covariate_stats_path(tag)
+    path.write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"Saved: {path}")
 
 
 def set_seed(seed: int):
@@ -77,8 +102,8 @@ def compute_loss(logits, bmd_pred, labels, bmd_true, ce, mse):
     return ce(logits, labels) + BMD_WEIGHT * mse(bmd_pred, bmd_true)
 
 
+# El batch tiene imagen, etiqueta y BMD, y además las covariables si se usan
 def unpack_batch(batch, use_covariates: bool, device):
-    """Batch de 3 elementos (image, label, bmd) o 4 (+ covariates)."""
     images, labels, bmd = (t.to(device) for t in batch[:3])
     covariates = batch[3].to(device) if use_covariates else None
     return images, labels, bmd, covariates
@@ -100,9 +125,9 @@ def train_one_epoch(model, loader, optimizer, ce, mse, device, use_covariates: b
     return running / len(loader.dataset)
 
 
+# Devuelve la pérdida, la exactitud y el RMSE calculados por imagen
 @torch.no_grad()
 def evaluate(model, loader, ce, mse, device, use_covariates: bool):
-    """Devuelve (loss, accuracy, rmse) por imagen."""
     model.eval()
     running, correct, sq_err, n = 0.0, 0, 0.0, 0
     for batch in loader:
@@ -135,6 +160,8 @@ def train(strategy_name: str, data_name: str, class_weighting: str = "none",
 
     loaders = make_dataloaders(batch_size=BATCH_SIZE, covariate_cols=covariate_cols, **DATASETS[data_name])
     model = LumosNet(pretrained=True, num_covariates=len(covariate_cols or [])).to(device)
+    if use_covariates:
+        save_covariate_stats(data_name, tag)
 
     train_labels = torch.as_tensor(loaders["train"].dataset.meta["label"].values, dtype=torch.long)
     class_weights = compute_class_weights(train_labels, scheme=class_weighting)
@@ -213,8 +240,8 @@ def plot_history(history, tag, best_epoch):
     print(f"Saved: {path}")
 
 
+# Argumentos que identifican un experimento, compartidos por train y evaluate
 def add_experiment_args(parser: argparse.ArgumentParser):
-    """Argumentos que identifican un experimento; compartidos por train y evaluate."""
     parser.add_argument("--strategy", choices=list(STRATEGIES), default="phased")
     parser.add_argument("--data", choices=list(DATASETS), default="full")
     parser.add_argument("--class-weighting", choices=CLASS_WEIGHTING, default="none")
@@ -224,5 +251,10 @@ def add_experiment_args(parser: argparse.ArgumentParser):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_experiment_args(parser)
+    parser.add_argument("--export-stats", action="store_true",
+                        help="Solo genera el JSON de covariables de un modelo ya entrenado, sin entrenar")
     args = parser.parse_args()
+    if args.export_stats:
+        save_covariate_stats(args.data, run_tag(args.strategy, args.data, args.class_weighting, True))
+        raise SystemExit
     train(args.strategy, args.data, args.class_weighting, args.covariates)

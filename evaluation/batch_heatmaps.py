@@ -1,9 +1,3 @@
-"""Heatmaps Grad-CAM para varios pacientes y vistas, cargando el modelo una sola vez.
-
-Uso: python -m evaluation.batch_heatmaps --patients 1-5,8 [--views 1,2] [--covariates]
-Después: python -m evaluation.heatmap_grid [--variant covars]
-"""
-
 import argparse
 
 import numpy as np

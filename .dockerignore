@@ -1,0 +1,12 @@
+.git
+.venv
+res
+runs
+outputs
+heatmaps
+yolo
+tests
+*.pdf
+*.png
+*.pt
+__pycache__

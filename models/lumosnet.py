@@ -12,23 +12,18 @@ def get_device():
 
 
 class LumosNet(nn.Module):
-    """ResNet50 + capa compartida + dos cabezas: clasificación (3 clases) y regresión de BMD.
-
-    num_covariates > 0 añade una rama que embebe las covariables clínicas y las
-    concatena con las features de imagen antes de la capa compartida.
-    """
-
     def __init__(self, num_classes: int = 3, pretrained: bool = True, dropout: float = 0.3,
                  num_covariates: int = 0, covariate_embed_dim: int = 32, shared_dim: int = 512):
         super().__init__()
 
         weights = ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
         backbone = resnet50(weights=weights)
-        in_features = backbone.fc.in_features  # 2048
+        in_features = backbone.fc.in_features  # 2048 en ResNet50
         backbone.fc = nn.Identity()
         self.backbone = backbone
 
         self.num_covariates = num_covariates
+        # Rama opcional que embebe las covariables clínicas para concatenarlas con las features de imagen
         if num_covariates > 0:
             self.covariate_embed = nn.Sequential(
                 nn.Linear(num_covariates, covariate_embed_dim),
@@ -68,8 +63,9 @@ class LumosNet(nn.Module):
         shared = self.shared(features)
         return self.classifier(shared), self.regressor(shared).squeeze(1)
 
+    # Todos los parámetros que no son del backbone. Las estrategias deben usar este método
+    # para no dejar capas fuera del optimizador
     def head_parameters(self):
-        """Todo lo que no es backbone. Las estrategias deben usar esto para no dejar capas fuera del optimizador."""
         params = list(self.classifier.parameters()) + \
                  list(self.regressor.parameters()) + \
                  list(self.shared.parameters())

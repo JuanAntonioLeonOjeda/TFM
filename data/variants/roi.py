@@ -1,9 +1,3 @@
-"""Variante ROI: solo vista AP, recortada a la franja central (25-75% del ancho).
-
-Requiere: python -m data.views (genera ap_only.csv)
-Uso:      python -m data.variants.roi
-"""
-
 import numpy as np
 import pandas as pd
 
@@ -16,8 +10,8 @@ LEFT_FRACTION = 0.25
 RIGHT_FRACTION = 0.75
 
 
+# Franja vertical central sin recortar en altura. Puede cortar columnas con escoliosis marcada
 def crop_roi(img: np.ndarray) -> np.ndarray:
-    """Franja vertical central, sin recortar en altura. Puede cortar columnas con escoliosis marcada."""
     w = img.shape[1]
     return img[:, int(w * LEFT_FRACTION):int(w * RIGHT_FRACTION)]
 

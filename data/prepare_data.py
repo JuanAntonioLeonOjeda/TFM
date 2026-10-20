@@ -1,8 +1,3 @@
-"""Comprueba los datos crudos, ejecuta df_preprocess y verifica la salida (incluida fuga entre splits).
-
-Uso: python -m data.prepare_data
-"""
-
 import sys
 
 import numpy as np

@@ -1,8 +1,3 @@
-"""Aplica a res/yolo_dataset/ las cajas corregidas exportadas de makesense.ai (CSV).
-
-Uso: python -m yolo.reintegrate --csv ruta/al/export.csv
-"""
-
 import argparse
 import shutil
 from pathlib import Path
@@ -23,7 +18,7 @@ def main():
     review_path = dataset_dir / "review.csv"
 
     corrections = pd.read_csv(args.csv)
-    # Filas sin "lumos" (1.jpg, 2.jpg...) son restos de una importación anterior, no pacientes
+    # Las filas sin lumos en el nombre (1.jpg, 2.jpg, etc.) son restos de una importación anterior, no pacientes
     corrections = corrections[corrections["image_name"].str.contains("lumos", case=False)].copy()
     corrections["patient"] = corrections["image_name"].str.replace(".jpg", "", regex=False)
 
@@ -39,7 +34,7 @@ def main():
     review = pd.read_csv(review_path)
     previously_accepted = review[review["accepted"] == True].copy()
 
-    # Aceptados que no aparecen en el CSV = borrados a mano durante la revisión
+    # Los aceptados que no aparecen en el CSV son los que se borraron a mano durante la revisión
     discarded_by_user = set(previously_accepted["patient"]) - corrected_patients
     if discarded_by_user:
         print(f"\n{len(discarded_by_user)} paciente(s) estaban aceptados pero NO aparecen "
@@ -63,7 +58,7 @@ def main():
         split = patient_to_split[patient]
         w, h = row["image_width"], row["image_height"]
 
-        # makesense.ai: bbox_x, bbox_y = esquina superior izquierda, en píxeles
+        # En makesense.ai, bbox_x y bbox_y son la esquina superior izquierda, en píxeles
         x0, y0 = row["bbox_x"], row["bbox_y"]
         bw, bh = row["bbox_width"], row["bbox_height"]
 

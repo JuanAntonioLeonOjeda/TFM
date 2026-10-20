@@ -4,7 +4,7 @@ import torch
 import torchvision.transforms as T
 from torch.utils.data import Dataset
 
-# Necesario al usar pesos preentrenados en ImageNet
+# Media y desviación de ImageNet, necesarias al usar pesos preentrenados
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 
@@ -26,13 +26,14 @@ def build_transforms(train: bool):
     return T.Compose(steps)
 
 
+# Replica el canal gris en tres canales, que es lo que espera ResNet
 def gray_to_rgb(gray: np.ndarray) -> np.ndarray:
-    """(H, W) -> (H, W, 3): ResNet espera 3 canales."""
     return np.stack([gray, gray, gray], axis=-1)
 
 
+# Media y desviación de cada covariable para el z-score. Se calcula siempre sobre train
+# para evitar fuga de datos
 def compute_covariate_stats(meta: pd.DataFrame, cols: list[str]) -> dict:
-    """{col: (media, std)} para z-score. Calcular SIEMPRE sobre train para evitar fuga de datos."""
     return {col: (meta[col].mean(), meta[col].std() or 1.0) for col in cols}
 
 
@@ -40,8 +41,8 @@ def normalize_covariates(row, cols: list[str], stats: dict) -> list[float]:
     return [(float(row[col]) - stats[col][0]) / stats[col][1] for col in cols]
 
 
+# Devuelve imagen, etiqueta y BMD, y además las covariables cuando se indican covariate_cols
 class LumosDataset(Dataset):
-    """Devuelve (image, label, bmd) o, si hay covariate_cols, (image, label, bmd, covariates)."""
 
     def __init__(self, images, meta: pd.DataFrame, train: bool, bmd_col: str = "bmd",
                  covariate_cols: list[str] | None = None,
@@ -56,7 +57,7 @@ class LumosDataset(Dataset):
             missing = [c for c in covariate_cols if c not in self.meta.columns]
             if missing:
                 raise ValueError(f"Columnas de covariables no encontradas en meta: {missing}")
-            # None solo para el split de train; val/test reciben las stats de train
+            # Solo el split de train calcula sus estadísticas; validación y test reciben las de train
             self.covariate_stats = covariate_stats or compute_covariate_stats(self.meta, covariate_cols)
 
     def __len__(self):

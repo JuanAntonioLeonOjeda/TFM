@@ -1,8 +1,3 @@
-"""Monta los heatmaps de heatmaps/ en una cuadrícula: una fila por paciente, una columna por vista.
-
-Uso: python -m evaluation.heatmap_grid [--patients 1-10] [--variant covars]
-"""
-
 import argparse
 import json
 import re
@@ -25,8 +20,9 @@ def natural_key(patient_id: str):
     return int(m.group(1)) if m else patient_id
 
 
+# Agrupa por paciente y vista los heatmaps de la variante pedida (reference o covars),
+# junto con los metadatos de su archivo JSON
 def load_entries(heatmaps_dir: Path, variant: str = "reference"):
-    """{patient_id: {view: (png_path, meta_del_json)}} solo de la variante pedida ('reference' o 'covars')."""
     entries = {}
     for png_path in heatmaps_dir.glob("heatmap_*_imagen*.png"):
         m = FILENAME_RE.match(png_path.name)

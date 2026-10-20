@@ -60,7 +60,7 @@ def read_image(path, normalize: bool = True) -> np.ndarray:
     ds = pydicom.dcmread(path)
     img = ds.pixel_array.astype(np.float32)
 
-    # MONOCHROME1: valores altos = negro; se invierte para que el hueso sea claro
+    # En MONOCHROME1 los valores altos se ven negros; se invierte para que el hueso aparezca claro
     if getattr(ds, "PhotometricInterpretation", "") == "MONOCHROME1":
         img = img.max() - img
 
