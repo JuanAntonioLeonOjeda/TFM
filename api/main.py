@@ -33,9 +33,10 @@ async def predict_endpoint(
     age: float = Form(..., ge=0, le=120),
     gender: Literal["female", "male"] = Form(...),
     bmi: float = Form(..., gt=0, le=80),
+    heatmap: bool = Form(False, description="Incluye el mapa Grad-CAM de la clase predicha (PNG en base64)"),
 ):
     data = await dicom.read()
     try:
-        return services["prediction"].predict_dicom(data, age, gender, bmi)
+        return services["prediction"].predict_dicom(data, age, gender, bmi, heatmap)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"No se pudo procesar el DICOM: {e}")
