@@ -33,3 +33,6 @@ tqdm==4.69.1
 typing_extensions==4.16.0
 grad-cam==1.5.7
 ultralytics==8.4.161
+fastapi
+uvicorn[standard]
+python-multipart
