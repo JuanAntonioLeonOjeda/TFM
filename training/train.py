@@ -1,6 +1,8 @@
 import argparse
 import json
+import os
 import random
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -18,7 +20,8 @@ from models.lumosnet import LumosNet, get_device
 from training.strategies.differential import DifferentialStrategy
 from training.strategies.phased import PhasedStrategy
 
-OUT_DIR = PROJECT_ROOT / "outputs"
+# Carpeta de checkpoints y figuras. La API la lee de MODEL_DIR para poder montarla como volumen
+OUT_DIR = Path(os.environ.get("MODEL_DIR", PROJECT_ROOT / "outputs"))
 
 EPOCHS = 50
 BATCH_SIZE = 32

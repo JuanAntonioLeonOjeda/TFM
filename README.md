@@ -47,3 +47,20 @@ python -m yolo.reintegrate --csv export.csv
 yolo detect train model=yolov8n.pt data=res/yolo_dataset/dataset.yaml epochs=100 imgsz=224 \
     project=res/yolo_dataset name=lumbar_detector
 ```
+
+## API
+
+Servicio FastAPI que carga `best_phased_full_covars.pt` y su `best_phased_full_covars_covariates.json`
+(se genera al entrenar con `--covariates`, o con `python -m training.train --covariates --export-stats`).
+La carpeta de los modelos se configura con `MODEL_DIR` (por defecto `outputs/`).
+
+```bash
+uvicorn api.main:app --port 8765          # documentación en /docs
+pytest tests
+
+docker build -t lumosnet-api .
+docker run -p 8000:8000 -v /ruta/a/modelos:/models:ro lumosnet-api
+
+curl -X POST localhost:8000/predict -F dicom=@radiografia.dcm \
+     -F age=65 -F gender=female -F bmi=24.5 -F heatmap=true
+```
