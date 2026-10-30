@@ -1,4 +1,5 @@
 import base64
+import tempfile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -82,3 +83,51 @@ def test_non_dicom_file_is_rejected(client):
     r = post(client, file=b"esto no es un DICOM")
     assert r.status_code == 422
     assert "DICOM" in r.json()["detail"]
+
+
+def test_heatmap_includes_the_preprocessed_image(client):
+    body = post(client, {**FORM, "heatmap": "true"}).json()
+    assert base64.b64decode(body["image_png_base64"]).startswith(b"\x89PNG")
+
+
+# Starlette vuelca las subidas grandes a un temporal con rollover(); mkstemp/mkdtemp cubren
+# cualquier otro fichero o carpeta temporal
+def test_upload_is_not_written_to_disk(client, monkeypatch):
+    def fail(*args, **kwargs):
+        raise AssertionError("la subida se escribió a disco")
+    monkeypatch.setattr(tempfile.SpooledTemporaryFile, "rollover", fail)
+    monkeypatch.setattr(tempfile, "mkstemp", fail)
+    monkeypatch.setattr(tempfile, "mkdtemp", fail)
+    big = DICOM.read_bytes()
+    assert len(big) > 1024 * 1024, "el DICOM de prueba debe superar el umbral de 1 MB de Starlette"
+    assert post(client, {**FORM, "heatmap": "true"}, big).status_code == 200
+
+
+def test_responses_are_not_cached(client):
+    assert post(client).headers["cache-control"] == "no-store"
+
+
+def test_privacy_notice(client):
+    notice = client.get("/privacy").json()["notice"]
+    assert "no se guardan" in notice and "entrenar" in notice
+
+
+def test_unknown_example_is_404(client):
+    assert client.get("/examples/no_existe/image").status_code == 404
+    assert client.post("/examples/no_existe/predict").status_code == 404
+
+
+def test_examples_predict_with_ground_truth(client):
+    examples = client.get("/examples").json()
+    if not examples:
+        pytest.skip("No hay ejemplos: python -m api.examples")
+    ex = examples[0]
+    assert {"id", "age", "gender", "bmi", "true_class", "true_bmd"} <= set(ex)
+    assert "file" not in ex and "path" not in ex
+
+    img = client.get(f"/examples/{ex['id']}/image")
+    assert img.status_code == 200 and img.content.startswith(b"\x89PNG")
+
+    body = client.post(f"/examples/{ex['id']}/predict").json()
+    assert body["ground_truth"] == {"class": ex["true_class"], "bmd": ex["true_bmd"]}
+    assert "heatmap_png_base64" in body

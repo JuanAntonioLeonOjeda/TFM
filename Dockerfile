@@ -18,7 +18,9 @@ COPY training ./training
 COPY infer.py .
 
 # El modelo (best_phased_full_covars.pt y su JSON de covariables) se monta como volumen en /models
+# y las radiografías de ejemplo (python -m api.examples) en /examples, que es opcional
 ENV MODEL_DIR=/models \
+    EXAMPLES_DIR=/examples \
     MPLBACKEND=Agg \
     PYTHONUNBUFFERED=1
 VOLUME /models
