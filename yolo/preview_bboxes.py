@@ -1,8 +1,3 @@
-"""Dibuja las cajas aceptadas de review.csv sobre sus imágenes, en cuadrícula, para revisarlas.
-
-Uso: python -m yolo.preview_bboxes [--n 30] [--only-split train]
-"""
-
 import argparse
 from pathlib import Path
 
@@ -17,8 +12,9 @@ LABEL_HEIGHT = 20
 COLS = 6
 
 
+# Dibuja la caja leída del archivo de etiquetas y no de review.csv,
+# porque tras reintegrate ya no guarda las coordenadas en píxeles
 def draw_yolo_box(img_path: Path, label_path: Path) -> tuple[Image.Image, float]:
-    """Dibuja la caja de labels/*.txt (no de review.csv: tras reintegrate ya no tiene píxeles)."""
     img = cv2.cvtColor(cv2.imread(str(img_path)), cv2.COLOR_BGR2RGB)
     h, w = img.shape[:2]
     _, xc, yc, bw, bh = map(float, label_path.read_text().split())

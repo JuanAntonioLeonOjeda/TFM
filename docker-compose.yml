@@ -1,0 +1,18 @@
+# Uso: MODEL_DIR=/ruta/a/modelos EXAMPLES_DIR=/ruta/a/examples docker compose up --build
+# Por defecto monta outputs/ y res/examples/ de este repo. La web queda en http://localhost:8080
+services:
+  backend:
+    build: .
+    volumes:
+      - ${MODEL_DIR:-./outputs}:/models:ro
+      - ${EXAMPLES_DIR:-./res/examples}:/examples:ro
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${PORT:-8080}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

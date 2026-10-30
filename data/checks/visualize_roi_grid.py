@@ -1,8 +1,3 @@
-"""Radiografías AP en resolución original con líneas verticales, para elegir el recorte ROI.
-
-Uso: python -m data.checks.visualize_roi_grid
-"""
-
 import subprocess
 
 import numpy as np
@@ -13,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from data.df_import import PROJECT_ROOT as ROOT, PROC_DIR, read_image
 
-# fracción del ancho
+# Posiciones de las líneas guía, como fracción del ancho de la imagen
 GRID_FRACTIONS = [0.30, 0.40, 0.50, 0.60, 0.70]
 N_SAMPLES = 9
 SEED = 20

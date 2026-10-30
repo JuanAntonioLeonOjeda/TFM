@@ -1,8 +1,3 @@
-"""Clasifica cada imagen como AP/LAT y genera view_labels.csv y ap_only.csv (una AP por paciente).
-
-Uso: python -m data.views
-"""
-
 from collections import Counter
 
 import pandas as pd
@@ -10,7 +5,7 @@ import pydicom
 
 from data.df_import import PROC_DIR, load_image_index
 
-# ViewPosition está vacío en ~87% de los DICOM; SeriesDescription sí es fiable.
+# ViewPosition está vacío en cerca del 87 % de los DICOM, mientras que SeriesDescription sí es fiable
 AP_KEYWORDS = ["ap", "腰椎前后位", "extension", "flexion", "bending"]
 LAT_KEYWORDS = ["lat", "腰椎侧位"]
 

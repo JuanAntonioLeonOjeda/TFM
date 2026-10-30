@@ -1,9 +1,3 @@
-"""Variante ROI híbrida: ambas vistas, recorte ROI solo en las AP.
-
-Requiere: python -m data.views (genera view_labels.csv)
-Uso:      python -m data.variants.roi_hybrid
-"""
-
 import pandas as pd
 
 from data.df_import import PROC_DIR

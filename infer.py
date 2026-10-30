@@ -1,10 +1,3 @@
-"""Inferencia sobre una radiografía DICOM con el modelo entrenado (phased, full).
-
-Uso: python infer.py --patient 001 [--view 2] [--covariates] [--heatmap]
-     python infer.py --dicom ruta/a/imagen.dcm [--heatmap]
-Cada ejecución se añade a outputs/inference_log.csv; con --heatmap guarda PNG + JSON en heatmaps/.
-"""
-
 import argparse
 import csv
 import json
@@ -28,13 +21,13 @@ RESULTS_CSV = OUT_DIR / "inference_log.csv"
 HEATMAPS_DIR = PROJECT_ROOT / "heatmaps"
 
 
+# Convierte un identificador como 001 o 1 al formato lumos_x_001
 def normalize_patient_id(patient: str) -> str:
-    """'001' o '1' -> 'lumos_x_001'."""
     return f"lumos_x_{int(patient):03d}" if patient.isdigit() else patient
 
 
+# Extrae el número de paciente de identificadores como 001, 1 o lumos_x_001
 def patient_id_to_int(patient: str) -> int:
-    """'001', '1' o 'lumos_x_001' -> 1."""
     if patient.isdigit():
         return int(patient)
     m = re.match(r"lumos_x_0*(\d+)$", patient)
@@ -43,8 +36,8 @@ def patient_id_to_int(patient: str) -> int:
     raise ValueError(f"No se pudo extraer un ID numérico de paciente de '{patient}'")
 
 
+# Expande una lista con rangos; por ejemplo, 1-5,8 equivale a los pacientes del 1 al 5 y el 8
 def parse_patient_list(spec: str) -> list[str]:
-    """'1-5,8,lumos_x_010' -> ['1', '2', '3', '4', '5', '8', 'lumos_x_010']."""
     patients = []
     for chunk in spec.split(","):
         chunk = chunk.strip()
@@ -58,11 +51,11 @@ def parse_patient_list(spec: str) -> list[str]:
     return patients
 
 
+# Ruta al DICOM número view del paciente (lumos_x_001_1.Dcm, lumos_x_001_2.Dcm, etc.)
 def resolve_dicom_path(patient: str, view: int = 1, dataset_root: Path = DATASET_ROOT) -> Path:
-    """Ruta al DICOM número `view` del paciente (lumos_x_001_1.Dcm, _2.Dcm...)."""
     patient_id = normalize_patient_id(patient)
 
-    # La carpeta contenedora varía (p.ej. lumos_x_001_280_dcm/), por eso rglob
+    # La carpeta contenedora varía (por ejemplo, lumos_x_001_280_dcm), por eso se busca con rglob
     candidate_dirs = [p for p in dataset_root.rglob(patient_id) if p.is_dir()]
     if not candidate_dirs:
         raise FileNotFoundError(
@@ -82,15 +75,16 @@ def resolve_dicom_path(patient: str, view: int = 1, dataset_root: Path = DATASET
     return files[view - 1]
 
 
+# Aplica la misma codificación y el mismo z-score, con estadísticas de train, que en el entrenamiento.
+# Devuelve los metadatos y las estadísticas
 def build_covariate_lookup():
-    """Misma codificación y z-score (stats de train) que en entrenamiento. Devuelve (meta, stats)."""
     meta = load_meta("metadata.csv", MEDICAL_COVARIATES)
     stats = compute_covariate_stats(meta[meta["split"] == "train"], MEDICAL_COVARIATES)
     return meta, stats
 
 
+# Devuelve el vector de covariables normalizado, con forma (1, num_covariates)
 def get_patient_covariates(patient_id_int: int, meta, stats: dict) -> torch.Tensor:
-    """Vector de covariables normalizado (1, num_covariates)."""
     rows = meta[meta["patient_id"] == patient_id_int]
     if rows.empty:
         raise ValueError(f"Paciente {patient_id_int} no encontrado en {PROC_DIR / 'metadata.csv'}.")
@@ -113,8 +107,9 @@ def load_model(device, num_covariates: int = 0):
     return model, model_path
 
 
+# Mismo preprocesado que en el entrenamiento. Devuelve el tensor de entrada al modelo
+# y la imagen uint8 tras CLAHE
 def preprocess(dicom_path: str):
-    """Mismo preprocesado que en entrenamiento. Devuelve (tensor (1,3,224,224), imagen uint8 tras CLAHE)."""
     img = process_image(dicom_path)
     tensor = build_transforms(train=False)(gray_to_rgb(img)).unsqueeze(0)
     return tensor, img
@@ -137,9 +132,9 @@ def heatmap_path(name: str, view: int | None = None, covariates: bool = False) -
     return str(HEATMAPS_DIR / f"heatmap_{name}{view_part}{suffix}.png")
 
 
+# Guarda la superposición y devuelve la clase explicada, o None si el objetivo es la BMD
 def save_heatmap(model, image_tensor, base_img_uint8_gray, target, class_idx, out_path,
                  covariates=None):
-    """Guarda el overlay y devuelve la clase explicada (None si target='bmd')."""
     base_rgb_float = gray_to_rgb(base_img_uint8_gray).astype(np.float32) / 255.0
     overlay, used_class_idx = generate_heatmap(
         model, image_tensor, base_rgb_float,

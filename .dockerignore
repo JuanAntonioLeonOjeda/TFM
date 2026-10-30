@@ -1,0 +1,14 @@
+.git
+.venv
+res
+runs
+outputs
+heatmaps
+yolo
+tests
+*.pdf
+*.png
+*.pt
+__pycache__
+frontend
+docker-compose.yml

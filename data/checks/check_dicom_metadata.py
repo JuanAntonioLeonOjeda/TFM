@@ -1,8 +1,3 @@
-"""Imprime todos los metadatos DICOM de un archivo o de una muestra aleatoria.
-
-Uso: python -m data.checks.check_dicom_metadata [--path x.Dcm | --sample 5]
-"""
-
 import argparse
 
 import pydicom
@@ -17,7 +12,7 @@ def show_metadata(path):
     ds = pydicom.dcmread(path)
 
     for elem in ds:
-        if elem.tag == (0x7FE0, 0x0010):  # PixelData
+        if elem.tag == (0x7FE0, 0x0010):  # etiqueta PixelData, que contiene los datos de la imagen
             print(f"  {elem.name:35s}: [datos de píxeles, {len(elem.value)} bytes]")
             continue
         try:

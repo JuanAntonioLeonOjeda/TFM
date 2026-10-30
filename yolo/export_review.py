@@ -1,9 +1,3 @@
-"""Copia los pacientes aceptados (train+val) a res/yolo_dataset/review_session/ para revisarlos en makesense.ai.
-
-Uso: python -m yolo.export_review
-Siguiente paso: corregir en makesense.ai y luego python -m yolo.reintegrate --csv export.csv
-"""
-
 import shutil
 from pathlib import Path
 

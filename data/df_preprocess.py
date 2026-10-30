@@ -1,8 +1,3 @@
-"""DICOM -> images[_<size>].npy + metadata[_<size>].csv (ambas vistas, split por paciente).
-
-Uso: python -m data.df_preprocess [--size 320]
-"""
-
 import argparse
 
 import numpy as np
@@ -26,8 +21,8 @@ META_COLS = ["patient_id", "image_path", "view", "label",
              "age", "gender", "BMI", "split"]
 
 
+# Añade la columna split (train, val o test) estratificando por paciente
 def split_by_patient(df: pd.DataFrame) -> pd.DataFrame:
-    """Añade la columna 'split' (train/val/test), estratificando por paciente."""
     patients = df.groupby("patient_id")["label"].first().reset_index()
 
     trainval_ids, test_ids = train_test_split(
@@ -35,7 +30,7 @@ def split_by_patient(df: pd.DataFrame) -> pd.DataFrame:
         stratify=patients["label"], random_state=SEED,
     )
     trainval = patients[patients["patient_id"].isin(trainval_ids)]
-    # VAL_FRACTION es sobre el total, no sobre train+val
+    # VAL_FRACTION se expresa sobre el total, no sobre la suma de train y val
     val_ratio = VAL_FRACTION / (1.0 - TEST_FRACTION)
     train_ids, val_ids = train_test_split(
         trainval["patient_id"], test_size=val_ratio,
@@ -50,8 +45,9 @@ def split_by_patient(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# Lee el DICOM, lo pasa a uint8, aplica el recorte opcional en resolución original,
+# redimensiona la imagen y aplica CLAHE
 def process_image(path: str, crop=None, size: int = IMG_SIZE) -> np.ndarray:
-    """DICOM -> uint8 -> crop opcional (en resolución original) -> resize -> CLAHE."""
     img = (read_image(path) * 255).astype(np.uint8)
     if crop is not None:
         img = crop(img)
@@ -84,8 +80,8 @@ def print_split_summary(df: pd.DataFrame):
     print(pd.crosstab(df["split"], df["label"]).to_string())
 
 
+# Guarda la matriz de imágenes y los metadatos en PROC_DIR con el sufijo indicado
 def save_dataset(df: pd.DataFrame, images: np.ndarray, suffix: str = ""):
-    """Guarda images{suffix}.npy y metadata{suffix}.csv en PROC_DIR."""
     PROC_DIR.mkdir(parents=True, exist_ok=True)
     meta = df[[c for c in META_COLS if c in df.columns]].reset_index(drop=True)
     meta.insert(0, "idx", range(len(meta)))
