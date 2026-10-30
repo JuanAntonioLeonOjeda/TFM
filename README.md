@@ -17,6 +17,10 @@ Todos los comandos se lanzan desde la raíz del repo.
 ![Ultralytics](https://img.shields.io/badge/ULTRALYTICS-8.4.161-111F68?style=for-the-badge&logo=yolo&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FASTAPI-0.151.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![Uvicorn](https://img.shields.io/badge/UVICORN-0.54.0-499848?style=for-the-badge&logo=gunicorn&logoColor=white)
+![React](https://img.shields.io/badge/REACT-19.3.1-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/VITE-8.3.5-646CFF?style=for-the-badge&logo=vite&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TYPESCRIPT-7.0.2-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Nginx](https://img.shields.io/badge/NGINX-1.30.6-009639?style=for-the-badge&logo=nginx&logoColor=white)
 ![Docker](https://img.shields.io/badge/DOCKER-29.8.2-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![Pytest](https://img.shields.io/badge/PYTEST-9.1.1-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)
 
@@ -30,6 +34,8 @@ models/       LumosNet
 training/     bucle de entrenamiento + estrategias de transfer learning
 evaluation/   evaluación en test, validación cruzada, Grad-CAM
 yolo/         pseudo-etiquetado con Grad-CAM y revisión manual del detector
+api/          backend FastAPI
+frontend/     interfaz web (React + Vite), servida por nginx
 infer.py      predicción sobre un DICOM / paciente
 ```
 
@@ -71,12 +77,40 @@ Servicio FastAPI que carga `best_phased_full_covars.pt` y su `best_phased_full_c
 (se genera al entrenar con `--covariates`, o con `python -m training.train --covariates --export-stats`).
 La carpeta de los modelos se configura con `MODEL_DIR` (por defecto `outputs/`).
 
-```bash
-uvicorn api.main:app --port 8765          # documentación en /docs
-pytest tests
+La interfaz web (`frontend/`, React) permite subir un DICOM (con edad, sexo e IMC) o elegir una
+radiografía de ejemplo, y muestra la clase predicha, las probabilidades, la BMD estimada y el mapa
+Grad-CAM de las zonas en las que se fijó el modelo. Los ejemplos son pacientes del split de test de LUMOS
+y se preparan con `python -m api.examples` en `EXAMPLES_DIR` (por defecto `res/examples/`); si no
+existen, la pestaña aparece vacía.
 
-docker build -t lumosnet-api .
-docker run -p 8000:8000 -v /ruta/a/modelos:/models:ro lumosnet-api
+Privacidad: las subidas se procesan solo en memoria (sin ficheros temporales ni en nginx ni en el
+backend), no se registran ni se usan para entrenar, y las respuestas de la API llevan `Cache-Control: no-store`.
+
+| Método | Ruta                      | Descripción                                               |
+|--------|---------------------------|-----------------------------------------------------------|
+| POST   | `/predict`                | DICOM + `age`, `gender`, `bmi` (+ `heatmap`)               |
+| GET    | `/examples`               | ejemplos con sus covariables y diagnóstico real            |
+| GET    | `/examples/{id}/image`    | radiografía preprocesada (PNG)                             |
+| POST   | `/examples/{id}/predict`  | predicción + heatmap + verdad terreno                      |
+| GET    | `/privacy`, `/health`     | aviso de privacidad, estado                                |
+
+### Docker (backend + frontend)
+
+nginx sirve el frontend y redirige `/api/*` al backend, que no se expone fuera de la red de Compose.
+
+```bash
+python -m api.examples                    # 3 pacientes de test por clase -> res/examples/
+docker compose up --build                 # http://localhost:8080
+# otras rutas o puerto:
+MODEL_DIR=/ruta/a/modelos EXAMPLES_DIR=/ruta/a/examples PORT=9000 docker compose up --build
+```
+
+### Desarrollo
+
+```bash
+uvicorn api.main:app --port 8000          # documentación en /docs
+cd frontend && npm install && npm run dev # http://localhost:5173, /api -> localhost:8000
+pytest tests
 
 curl -X POST localhost:8000/predict -F dicom=@radiografia.dcm \
      -F age=65 -F gender=female -F bmi=24.5 -F heatmap=true

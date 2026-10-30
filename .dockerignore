@@ -10,3 +10,5 @@ tests
 *.png
 *.pt
 __pycache__
+frontend
+docker-compose.yml
