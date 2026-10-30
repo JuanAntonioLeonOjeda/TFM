@@ -122,12 +122,22 @@ def test_examples_predict_with_ground_truth(client):
     if not examples:
         pytest.skip("No hay ejemplos: python -m api.examples")
     ex = examples[0]
-    assert {"id", "age", "gender", "bmi", "true_class", "true_bmd"} <= set(ex)
+    assert {"id", "age", "gender", "bmi", "true_class", "true_bmd", "true_t_score"} <= set(ex)
     assert "file" not in ex and "path" not in ex
 
     img = client.get(f"/examples/{ex['id']}/image")
     assert img.status_code == 200 and img.content.startswith(b"\x89PNG")
 
     body = client.post(f"/examples/{ex['id']}/predict").json()
-    assert body["ground_truth"] == {"class": ex["true_class"], "bmd": ex["true_bmd"]}
+    assert body["ground_truth"] == {"class": ex["true_class"], "bmd": ex["true_bmd"], "t_score": ex["true_t_score"]}
     assert "heatmap_png_base64" in body
+
+
+def test_model_info_reports_test_metrics(client):
+    info = client.get("/model-info").json()
+    assert info["model"] == MODEL_FILES[0].name
+    if info["test_metrics"] is None:
+        pytest.skip("No hay ejemplos: python -m api.examples")
+    metrics = info["test_metrics"]
+    assert 0 <= metrics["accuracy"] <= 1
+    assert sum(map(sum, metrics["confusion_matrix"])) == metrics["n_images"]

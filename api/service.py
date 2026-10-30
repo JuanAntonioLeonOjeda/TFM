@@ -40,7 +40,8 @@ class PredictionService:
         spec = json.loads(stats_path.read_text(encoding="utf-8"))
         self.stats = {c: (spec["mean"][c], spec["std"][c]) for c in spec["covariates"]}
         self.gender_codes = spec["codes"]["gender"]
-        self.examples = {ex["id"]: ex for ex in load_examples()}
+        examples, self.test_metrics = load_examples()
+        self.examples = {ex["id"]: ex for ex in examples}
         # Grad-CAM registra hooks en el modelo compartido: las peticiones simultáneas se serializan
         self._lock = threading.Lock()
 
@@ -87,5 +88,5 @@ class PredictionService:
     def predict_example(self, example_id: str, heatmap: bool = True) -> dict:
         ex = self.examples[example_id]
         result = self.predict_dicom(ex["path"].read_bytes(), ex["age"], ex["gender"], ex["bmi"], heatmap)
-        result["ground_truth"] = {"class": ex["true_class"], "bmd": ex["true_bmd"]}
+        result["ground_truth"] = {"class": ex["true_class"], "bmd": ex["true_bmd"], "t_score": ex["true_t_score"]}
         return result

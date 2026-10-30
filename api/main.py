@@ -54,6 +54,13 @@ def privacy():
     return {"notice": PRIVACY_NOTICE}
 
 
+@app.get("/model-info")
+def model_info():
+    """Rendimiento del modelo en el split de test de LUMOS (se calcula con python -m api.examples)."""
+    return {"model": services["prediction"].model_path.name,
+            "test_metrics": services["prediction"].test_metrics}
+
+
 @app.post("/predict")
 async def predict_endpoint(
     dicom: UploadFile = File(..., description="Radiografía lumbar en formato DICOM"),
