@@ -9,6 +9,7 @@ export interface Example {
   bmi: number
   true_class: ClassName
   true_bmd: number
+  true_t_score: number
 }
 
 export interface Prediction {
@@ -17,7 +18,15 @@ export interface Prediction {
   bmd_estimated: number
   heatmap_png_base64: string
   image_png_base64: string
-  ground_truth?: { class: ClassName; bmd: number }
+  ground_truth?: { class: ClassName; bmd: number; t_score: number }
+}
+
+export interface TestMetrics {
+  model: string
+  n_images: number
+  accuracy: number
+  adjacent_error_share: number
+  confusion_matrix: number[][]
 }
 
 export interface PatientData {
@@ -46,6 +55,9 @@ function errorMessage(body: unknown): string {
 }
 
 export const getPrivacyNotice = () => request<{ notice: string }>('/privacy').then((r) => r.notice)
+
+export const getTestMetrics = () =>
+  request<{ test_metrics: TestMetrics | null }>('/model-info').then((r) => r.test_metrics)
 
 export const getExamples = () => request<Example[]>('/examples')
 

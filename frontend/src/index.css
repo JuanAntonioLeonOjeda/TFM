@@ -3,6 +3,12 @@
   --accent: #2459c9; --accent-soft: #e6edfb; --on-accent: #ffffff;
   --sano: #1f8a5b; --osteopenia: #c98a12; --osteoporosis: #c43d3d;
   --notice-bg: #eef6f0; --notice-border: #b9dcc4; --error: #b42318;
+  --warning-bg: #fdf6e7; --warning-border: #ecd3a0;
+  /* Marcas de gráficas: clases y series validadas con el validador de paletas (modo claro) */
+  --mark-sano: #1f8a5b; --mark-osteopenia: #c98a12; --mark-osteoporosis: #c43d3d;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s-muted: #b4bcc6;
+  --seq-lo: #f1f5fb; --seq-hi: #1c5cab; --seq-text-on: #ffffff;
+  --grid: #e6e9ee; --axis: #5d6877;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -10,6 +16,11 @@
     --accent: #7aa2f7; --accent-soft: #24304a; --on-accent: #10151c;
     --sano: #4cc38a; --osteopenia: #e5b04a; --osteoporosis: #f07171;
     --notice-bg: #17271e; --notice-border: #2f5a3e; --error: #f97066;
+    --warning-bg: #2a2214; --warning-border: #5c4a24;
+    --mark-sano: #24936a; --mark-osteopenia: #b3891a; --mark-osteoporosis: #de4f6b;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s-muted: #4a5462;
+    --seq-lo: #1f2630; --seq-hi: #3987e5; --seq-text-on: #ffffff;
+    --grid: #2a323d; --axis: #9aa5b3;
   }
 }
 * { box-sizing: border-box; }
@@ -57,7 +68,8 @@ button.primary:disabled { opacity: .5; cursor: default; }
 .example .meta { font-size: .8rem; color: var(--muted); margin-top: 6px; }
 .badge-row { margin-top: 6px; }
 .badge { display: inline-block; font-size: .75rem; font-weight: 600; padding: 1px 8px; border-radius: 999px;
-         color: var(--c); border: 1px solid var(--c); }
+         color: var(--c); border: 1px solid var(--c); white-space: nowrap; }
+.nowrap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .empty { color: var(--muted); text-align: center; padding: 40px 10px; }
 .error { color: var(--error); margin: 10px 0 0; }
@@ -73,8 +85,12 @@ button.primary:disabled { opacity: .5; cursor: default; }
 .track { height: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
 .fill { height: 100%; background: var(--c); border-radius: 999px; }
 .pct { text-align: right; font-variant-numeric: tabular-nums; }
-.truth { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px;
-         font-size: .9rem; margin-bottom: 16px; }
+.truth { background: var(--bg); border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px;
+         padding: 8px 12px; font-size: .9rem; margin-bottom: 16px; }
+.truth.hit { border-left-color: var(--sano); }
+.truth.miss { border-left-color: var(--osteoporosis); }
+.warning { background: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: 8px;
+           padding: 8px 12px; font-size: .9rem; margin-bottom: 16px; }
 
 .images { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 420px) { .images { grid-template-columns: 1fr; } }

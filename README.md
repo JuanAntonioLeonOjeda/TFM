@@ -18,6 +18,7 @@ Todos los comandos se lanzan desde la raíz del repo.
 ![FastAPI](https://img.shields.io/badge/FASTAPI-0.151.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![Uvicorn](https://img.shields.io/badge/UVICORN-0.54.0-499848?style=for-the-badge&logo=gunicorn&logoColor=white)
 ![React](https://img.shields.io/badge/REACT-19.3.1-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![React Router](https://img.shields.io/badge/REACT%20ROUTER-8.5.1-CA4245?style=for-the-badge&logo=reactrouter&logoColor=white)
 ![Vite](https://img.shields.io/badge/VITE-8.3.5-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TYPESCRIPT-7.0.2-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Nginx](https://img.shields.io/badge/NGINX-1.30.6-009639?style=for-the-badge&logo=nginx&logoColor=white)
@@ -79,9 +80,20 @@ La carpeta de los modelos se configura con `MODEL_DIR` (por defecto `outputs/`).
 
 La interfaz web (`frontend/`, React) permite subir un DICOM (con edad, sexo e IMC) o elegir una
 radiografía de ejemplo, y muestra la clase predicha, las probabilidades, la BMD estimada y el mapa
-Grad-CAM de las zonas en las que se fijó el modelo. Los ejemplos son pacientes del split de test de LUMOS
-y se preparan con `python -m api.examples` en `EXAMPLES_DIR` (por defecto `res/examples/`); si no
-existen, la pestaña aparece vacía.
+Grad-CAM de las zonas en las que se fijó el modelo. Avisa cuando la predicción es dudosa (las dos clases
+más probables a menos de 10 puntos) y muestra la exactitud del modelo en test.
+
+En `/proyecto` hay una explicación del TFM en 11 capítulos (problema, estado del arte, datos, modelo,
+entrenamiento, experimentos, modelo final, interpretabilidad, despliegue y conclusiones), basada en la
+memoria, con gráficas interactivas y Grad-CAM calculado en vivo sobre los ejemplos. Las métricas de cada
+experimento están en `frontend/src/docs/metrics.ts` (solo cifras agregadas); las radiografías no van en
+la web, se piden a la API.
+
+Los ejemplos son pacientes del split de test de LUMOS y se preparan con `python -m api.examples` en
+`EXAMPLES_DIR` (por defecto `res/examples/`); si no existen, la pestaña aparece vacía. El script predice
+todo el split de test, guarda las métricas en el manifiesto y elige por clase 2 aciertos y 1 fallo entre
+clases vecinas (`--correct`, `--errors`), para que los ejemplos reflejen cómo se comporta el modelo. Hay que
+volver a ejecutarlo al cambiar de modelo.
 
 Privacidad: las subidas se procesan solo en memoria (sin ficheros temporales ni en nginx ni en el
 backend), no se registran ni se usan para entrenar, y las respuestas de la API llevan `Cache-Control: no-store`.
@@ -92,6 +104,7 @@ backend), no se registran ni se usan para entrenar, y las respuestas de la API l
 | GET    | `/examples`               | ejemplos con sus covariables y diagnóstico real            |
 | GET    | `/examples/{id}/image`    | radiografía preprocesada (PNG)                             |
 | POST   | `/examples/{id}/predict`  | predicción + heatmap + verdad terreno                      |
+| GET    | `/model-info`             | exactitud y matriz de confusión del modelo en test         |
 | GET    | `/privacy`, `/health`     | aviso de privacidad, estado                                |
 
 ### Docker (backend + frontend)
@@ -99,7 +112,7 @@ backend), no se registran ni se usan para entrenar, y las respuestas de la API l
 nginx sirve el frontend y redirige `/api/*` al backend, que no se expone fuera de la red de Compose.
 
 ```bash
-python -m api.examples                    # 3 pacientes de test por clase -> res/examples/
+python -m api.examples                    # 2 aciertos + 1 fallo por clase -> res/examples/
 docker compose up --build                 # http://localhost:8080
 # otras rutas o puerto:
 MODEL_DIR=/ruta/a/modelos EXAMPLES_DIR=/ruta/a/examples PORT=9000 docker compose up --build
