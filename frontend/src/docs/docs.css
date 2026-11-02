@@ -218,3 +218,7 @@ table.compare tr.key-row > * { background: color-mix(in oklab, var(--accent-soft
 .references li { margin-bottom: 8px; overflow-wrap: anywhere; }
 table.compare th a { color: var(--accent); text-decoration: none; }
 table.compare th a:hover { text-decoration: underline; }
+
+.site-footer { max-width: 1240px; margin: 0 auto; padding: 20px 16px 32px; border-top: 1px solid var(--border);
+               font-size: .8rem; color: var(--muted); }
+.site-footer a { color: inherit; }

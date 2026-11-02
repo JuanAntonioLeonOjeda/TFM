@@ -29,6 +29,13 @@ export default function App() {
         <Route path="/proyecto/:slug" element={<DocsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <footer className="site-footer">
+        Radiografías y datos de entrenamiento:{' '}
+        <a href="https://doi.org/10.1145/3746027.3758282" target="_blank" rel="noopener noreferrer">LUMOS</a>{' '}
+        (Shi et al., 2025), con licencia{' '}
+        <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener noreferrer">CC BY-NC 4.0</a>.
+        Las imágenes se muestran preprocesadas (224×224, CLAHE). Uso no comercial.
+      </footer>
     </>
   )
 }
