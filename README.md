@@ -37,6 +37,7 @@ evaluation/   evaluación en test, validación cruzada, Grad-CAM
 yolo/         pseudo-etiquetado con Grad-CAM y revisión manual del detector
 api/          backend FastAPI
 frontend/     interfaz web (React + Vite), servida por nginx
+deploy/       despliegue en Hugging Face Spaces
 infer.py      predicción sobre un DICOM / paciente
 ```
 
@@ -117,6 +118,25 @@ docker compose up --build                 # http://localhost:8080
 # otras rutas o puerto:
 MODEL_DIR=/ruta/a/modelos EXAMPLES_DIR=/ruta/a/examples PORT=9000 docker compose up --build
 ```
+
+### Hugging Face Spaces
+
+En un Space de tipo Docker corre un solo contenedor: `api/web.py` sirve la web y monta la API en `/api`,
+en el puerto 7860. `build_space.sh` junta en una carpeta el código del último commit, el modelo y los
+ejemplos, y `hf upload` la sube (los ficheros grandes van solos por LFS/Xet).
+
+```bash
+pip install -U huggingface_hub && hf auth login       # token con permiso de escritura
+# crear el Space en https://huggingface.co/new-space (SDK: Docker, plantilla Blank)
+deploy/huggingface/build_space.sh /tmp/lumosnet-space
+hf upload <usuario>/lumosnet /tmp/lumosnet-space . --repo-type space
+# probarlo antes en local:
+docker build -t lumosnet-space /tmp/lumosnet-space && docker run -p 7860:7860 lumosnet-space
+```
+
+La ficha del Space es `deploy/huggingface/README.md`. LUMOS tiene licencia
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/): la demo es de uso no comercial y la web
+cita el dataset e indica que las imágenes se muestran preprocesadas.
 
 ### Desarrollo
 
