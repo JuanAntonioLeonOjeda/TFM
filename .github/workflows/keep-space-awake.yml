@@ -1,0 +1,32 @@
+# Visita el Space de Hugging Face una vez al día para que no se duerma por inactividad.
+# La URL se puede cambiar con la variable de repositorio SPACE_URL (Settings > Secrets and variables > Actions).
+name: Keep Space awake
+
+on:
+  schedule:
+    - cron: "17 6 * * *"   # todos los días a las 06:17 UTC (minuto poco habitual: menos colas en GitHub)
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ping /api/health
+        env:
+          SPACE_URL: ${{ vars.SPACE_URL || 'https://juanan237-lumosnet.hf.space' }}
+        run: |
+          # Si el Space estaba dormido, tarda unos minutos en arrancar: se reintenta hasta 8 minutos
+          for i in $(seq 1 16); do
+            if curl -fsS --max-time 30 "$SPACE_URL/api/health"; then
+              echo
+              echo "Space activo"
+              exit 0
+            fi
+            echo "Intento $i: aún no responde, reintento en 30 s"
+            sleep 30
+          done
+          echo "::error::El Space no respondió en $SPACE_URL/api/health"
+          exit 1
