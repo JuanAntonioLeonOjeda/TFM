@@ -1,0 +1,75 @@
+# Despliega en el Space de Hugging Face cada push a main que cambie el código de la app.
+# Solo sube el código: el modelo (outputs/) y los ejemplos (res/examples/) no están en GitHub y se quedan
+# en el Space tal como se subieron a mano con deploy/huggingface/build_space.sh.
+#
+# Necesita el secreto HF_TOKEN: un token de Hugging Face con permiso de escritura en el Space.
+# El repo del Space se puede cambiar con la variable SPACE_REPO.
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - api/**
+      - data/**
+      - evaluation/**
+      - models/**
+      - training/**
+      - infer.py
+      - requirements-api.txt
+      - frontend/**
+      - deploy/huggingface/**
+      - .github/workflows/deploy-space.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un despliegue cada vez; si llega otro push mientras tanto, se despliega después
+concurrency:
+  group: deploy-space
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SPACE_REPO: ${{ vars.SPACE_REPO || 'Juanan237/lumosnet' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar el código del Space
+        run: CODE_ONLY=1 deploy/huggingface/build_space.sh "$RUNNER_TEMP/space"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Instalar la CLI de Hugging Face
+        run: pip install "huggingface_hub==2.4.0"
+
+      - name: Subir al Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # Se borran del Space los ficheros de código que ya no existen en el repo; los que se suben se
+          # sustituyen. outputs/ y res/ no entran en los patrones, así que el modelo y los ejemplos se quedan
+          hf upload "$SPACE_REPO" "$RUNNER_TEMP/space" . --repo-type space \
+            --commit-message "Deploy ${GITHUB_SHA::7} from GitHub" \
+            --delete "api/**" --delete "data/**" --delete "evaluation/**" --delete "models/**" \
+            --delete "training/**" --delete "frontend/**"
+
+      - name: Esperar a que el Space arranque
+        run: |
+          for i in $(seq 1 40); do
+            stage=$(curl -fsS "https://huggingface.co/api/spaces/$SPACE_REPO" | jq -r '.runtime.stage')
+            echo "$(date +%T) $stage"
+            case $stage in
+              RUNNING) [ "$i" -gt 2 ] && exit 0 ;;
+              *ERROR) echo "::error::El Space ha fallado ($stage). Revisa los logs en https://huggingface.co/spaces/$SPACE_REPO"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::El Space no ha arrancado en 10 minutos"
+          exit 1
