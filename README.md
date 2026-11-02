@@ -134,7 +134,7 @@ hf upload <usuario>/lumosnet /tmp/lumosnet-space . --repo-type space
 docker build -t lumosnet-space /tmp/lumosnet-space && docker run -p 7860:7860 lumosnet-space
 ```
 
-La ficha del Space es `deploy/huggingface/README.md`. LUMOS tiene licencia
+El workflow `keep-space-awake.yml` visita `/api/health` una vez al día para que el Space no se duerma (también se puede lanzar a mano desde Actions; la URL se cambia con la variable `SPACE_URL`). La ficha del Space es `deploy/huggingface/README.md`. LUMOS tiene licencia
 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/): la demo es de uso no comercial y la web
 cita el dataset e indica que las imágenes se muestran preprocesadas.
 
