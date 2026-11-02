@@ -125,6 +125,11 @@ En un Space de tipo Docker corre un solo contenedor: `api/web.py` sirve la web y
 en el puerto 7860. `build_space.sh` junta en una carpeta el código del último commit, el modelo y los
 ejemplos, y `hf upload` la sube (los ficheros grandes van solos por LFS/Xet).
 
+**Despliegue automático:** cada push a `main` que toque el código de la app lanza el workflow
+`deploy-space.yml`, que sube solo el código (`CODE_ONLY=1 build_space.sh`). El modelo y los ejemplos no están en
+GitHub: se suben a mano una vez y el workflow no los toca. Necesita el secreto `HF_TOKEN` (token *fine-grained*
+con escritura en el Space); el repo del Space se cambia con la variable `SPACE_REPO`.
+
 ```bash
 pip install -U huggingface_hub && hf auth login       # token con permiso de escritura
 # crear el Space en https://huggingface.co/new-space (SDK: Docker, plantilla Blank)
