@@ -8,6 +8,17 @@
 .topnav a { color: var(--muted); text-decoration: none; font-weight: 600; font-size: .9rem; padding: 6px 12px; border-radius: 8px; }
 .topnav a:hover { color: var(--text); background: var(--bg); }
 .topnav a.active { color: var(--accent); background: var(--accent-soft); }
+.theme-toggle { display: grid; place-items: center; width: 34px; height: 34px; flex: none; padding: 0; cursor: pointer;
+                color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 8px; }
+.theme-toggle:hover { color: var(--text); background: var(--bg); }
+@media (max-width: 480px) {
+  .topbar-inner { gap: 8px; padding: 10px 12px; }
+  .topnav { gap: 2px; }
+  .topnav a { padding: 6px 6px; font-size: .85rem; white-space: nowrap; }
+}
+@media (max-width: 400px) {
+  .brand-name { display: none; }
+}
 
 /* Layout de los capítulos */
 .docs { max-width: 1240px; margin: 0 auto; padding: 24px 16px 64px; display: grid;
