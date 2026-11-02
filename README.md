@@ -82,7 +82,9 @@ La carpeta de los modelos se configura con `MODEL_DIR` (por defecto `outputs/`).
 La interfaz web (`frontend/`, React) permite subir un DICOM (con edad, sexo e IMC) o elegir una
 radiografía de ejemplo, y muestra la clase predicha, las probabilidades, la BMD estimada y el mapa
 Grad-CAM de las zonas en las que se fijó el modelo. Avisa cuando la predicción es dudosa (las dos clases
-más probables a menos de 10 puntos) y muestra la exactitud del modelo en test.
+más probables a menos de 10 puntos) y muestra la exactitud del modelo en test. En móvil, al llegar el resultado la
+página baja sola hasta él. Tiene modo claro y oscuro: por defecto el del sistema, y el que se elija con el
+botón de la cabecera se recuerda en el navegador.
 
 En `/proyecto` hay una explicación del TFM en 11 capítulos (problema, estado del arte, datos, modelo,
 entrenamiento, experimentos, modelo final, interpretabilidad, despliegue y conclusiones), basada en la

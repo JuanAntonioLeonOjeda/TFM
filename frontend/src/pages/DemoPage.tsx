@@ -22,6 +22,7 @@ export function DemoPage() {
   // para que el dibujo no cambie de sitio al cambiar de pestaña
   const sideRef = useRef<HTMLDivElement>(null)
   const [uploadHeight, setUploadHeight] = useState<number>()
+  const resultRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     const side = sideRef.current
@@ -30,6 +31,14 @@ export function DemoPage() {
     observer.observe(side)
     return () => observer.disconnect()
   }, [tab])
+
+  // En una sola columna (móvil) el resultado queda debajo del formulario o de los ejemplos: se lleva a la vista
+  useEffect(() => {
+    if (!result && !error) return
+    if (!window.matchMedia('(max-width: 860px)').matches) return
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    resultRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+  }, [result, error])
 
   useEffect(() => {
     getTestMetrics().then(setMetrics).catch(() => {})
@@ -103,7 +112,7 @@ export function DemoPage() {
           <PrivacyNotice />
         </div>
 
-        <section className={`panel result-panel${!busy && !result ? ' is-empty' : ''}`} aria-live="polite"
+        <section ref={resultRef} className={`panel result-panel${!busy && !result ? ' is-empty' : ''}`} aria-live="polite"
                  style={tab === 'examples' && !busy && !result ? { minHeight: uploadHeight } : undefined}>
           {busy && <div className="empty"><div className="spinner" />Analizando…</div>}
           {!busy && result && <ResultPanel result={result} exampleId={exampleId} metrics={metrics} />}

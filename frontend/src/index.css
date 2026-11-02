@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --bg: #f6f7f9; --panel: #ffffff; --text: #1c2430; --muted: #5d6877; --border: #dde2e8;
   --accent: #2459c9; --accent-soft: #e6edfb; --on-accent: #ffffff;
   --sano: #1f8a5b; --osteopenia: #c98a12; --osteoporosis: #c43d3d;
@@ -10,8 +11,10 @@
   --seq-lo: #f1f5fb; --seq-hi: #1c5cab; --seq-text-on: #ffffff;
   --grid: #e6e9ee; --axis: #5d6877;
 }
+/* Modo oscuro: el del sistema, salvo que se elija otro con el botón de la cabecera (data-theme en <html>) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #12161c; --panel: #1b2129; --text: #e6eaef; --muted: #9aa5b3; --border: #2d3540;
     --accent: #7aa2f7; --accent-soft: #24304a; --on-accent: #10151c;
     --sano: #4cc38a; --osteopenia: #e5b04a; --osteoporosis: #f07171;
@@ -22,6 +25,18 @@
     --seq-lo: #1f2630; --seq-hi: #3987e5; --seq-text-on: #ffffff;
     --grid: #2a323d; --axis: #9aa5b3;
   }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #12161c; --panel: #1b2129; --text: #e6eaef; --muted: #9aa5b3; --border: #2d3540;
+  --accent: #7aa2f7; --accent-soft: #24304a; --on-accent: #10151c;
+  --sano: #4cc38a; --osteopenia: #e5b04a; --osteoporosis: #f07171;
+  --notice-bg: #17271e; --notice-border: #2f5a3e; --error: #f97066;
+  --warning-bg: #2a2214; --warning-border: #5c4a24;
+  --mark-sano: #24936a; --mark-osteopenia: #b3891a; --mark-osteoporosis: #de4f6b;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s-muted: #4a5462;
+  --seq-lo: #1f2630; --seq-hi: #3987e5; --seq-text-on: #ffffff;
+  --grid: #2a323d; --axis: #9aa5b3;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
@@ -48,7 +63,7 @@ h2 { font-size: 1.05rem; margin: 0 0 12px; }
 
 .layout { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 20px; align-items: stretch; }
 .side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.result-panel { display: flex; flex-direction: column; }
+.result-panel { display: flex; flex-direction: column; scroll-margin-top: 68px; }
 .examples-tab .result-panel { align-self: start; }
 .examples-tab .result-panel.is-empty { position: sticky; top: 72px; }
 @media (max-width: 860px) { .examples-tab .result-panel.is-empty { position: static; } }
